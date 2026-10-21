@@ -59,8 +59,11 @@ describe('AnthropicAssistantModel', () => {
     await new AnthropicAssistantModel(CONFIG).reply(INPUT);
 
     const { url, headers, body } = await sentRequest(fetchMock);
-    expect(url).toBe('https://api.anthropic.com/v1/messages');
+    expect(url).toContain('https://api.anthropic.com/v1/messages');
     expect(headers.get('x-api-key')).toBe('sk-test');
+    expect(headers.get('anthropic-beta')).toContain(
+      'server-side-fallback-2026-07-01'
+    );
     expect(body).toMatchObject({
       model: 'claude-sonnet-5-5',
       system: [
@@ -72,13 +75,70 @@ describe('AnthropicAssistantModel', () => {
       ],
       messages: [{ role: 'user', content: '¿Dónde queda Catia?' }],
       output_config: { effort: 'low' },
+      fallbacks: 'default',
+      tool_choice: { type: 'auto' },
+      tools: [
+        expect.objectContaining({
+          name: 'transfer_to_human',
+          strict: true,
+          input_schema: expect.objectContaining({
+            required: ['reason'],
+          }),
+        }),
+      ],
     });
+  });
+
+  it('hands over when the model calls transfer_to_human', async () => {
+    stubFetch(
+      message({
+        stop_reason: 'tool_use',
+        content: [
+          { type: 'text', text: 'Un momento' },
+          {
+            type: 'tool_use',
+            id: 'toolu_1',
+            name: 'transfer_to_human',
+            input: { reason: 'pricing' },
+          },
+        ],
+      })
+    );
+
+    expect(
+      await new AnthropicAssistantModel(CONFIG).reply(INPUT)
+    ).toMatchObject({
+      kind: 'handoff',
+      reason: 'pricing',
+      model: 'claude-sonnet-5-5',
+    });
+  });
+
+  it('treats an unknown handoff reason as an unusable reply', async () => {
+    stubFetch(
+      message({
+        stop_reason: 'tool_use',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu_1',
+            name: 'transfer_to_human',
+            input: { reason: 'error' },
+          },
+        ],
+      })
+    );
+
+    await expect(
+      new AnthropicAssistantModel(CONFIG).reply(INPUT)
+    ).rejects.toMatchObject({ reason: 'empty' });
   });
 
   it('returns the text, the model and the tokens', async () => {
     stubFetch(message());
 
     expect(await new AnthropicAssistantModel(CONFIG).reply(INPUT)).toEqual({
+      kind: 'answer',
       text: 'Queda en la Av. Sucre.',
       model: 'claude-sonnet-5-5',
       usage: {

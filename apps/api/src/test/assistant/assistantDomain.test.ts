@@ -45,6 +45,14 @@ describe('buildInstructions', () => {
     expect(buildInstructions(null)).toContain('No tienes datos de sedes');
   });
 
+  it('tells the model to hand over with transfer_to_human, not to improvise', () => {
+    const text = buildInstructions(null);
+    expect(text).toContain('transfer_to_human');
+    expect(text).toContain('data_not_found');
+    expect(text).toContain('pricing');
+    expect(text).toContain('customer_requested');
+  });
+
   it('is the same text for the same stores, so the prompt cache hits', () => {
     const stores = [
       { name: 'Catia', address: null, mapUrl: null, publicHours: null },

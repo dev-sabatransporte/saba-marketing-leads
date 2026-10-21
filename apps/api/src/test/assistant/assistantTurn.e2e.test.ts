@@ -18,7 +18,9 @@ import type {
   AssistantModelPort,
   ModelReply,
 } from '../../modules/assistant/application/ports/out/AssistantModelPort';
+import type { StoresSnapshot } from '../../modules/assistant/application/ports/out/StoresSourcePort';
 import { ModelUnavailableError } from '../../modules/assistant/domain/AssistantErrors';
+import { HANDOFF_NOTICE } from '../../modules/assistant/domain/handoff';
 import type { Store } from '../../modules/assistant/domain/instructions';
 import {
   assistantRuns,
@@ -28,7 +30,10 @@ import { AssistantModule } from '../../modules/assistant/module';
 import { ASSISTANT_TOKENS } from '../../modules/assistant/tokens';
 import type { ProcessWebhookEventPort } from '../../modules/whatsapp/application/ports/in/ProcessWebhookEventPort';
 import type { WebhookEventRepositoryPort } from '../../modules/whatsapp/application/ports/out/WebhookEventRepositoryPort';
-import { whatsappMessages } from '../../modules/whatsapp/infrastructure/persistence/whatsapp.schema';
+import {
+  whatsappConversations,
+  whatsappMessages,
+} from '../../modules/whatsapp/infrastructure/persistence/whatsapp.schema';
 import { WhatsAppModule } from '../../modules/whatsapp/module';
 import { WHATSAPP_TOKENS } from '../../modules/whatsapp/tokens';
 import {
@@ -50,8 +55,11 @@ const CATIA: Store = {
   publicHours: 'Lunes a viernes 8:00 a. m. a 5:00 p. m.',
 };
 
+const ANSWER_TEXT =
+  'Hola, soy el asistente virtual de Saba. Catia queda en la Av. Sucre.';
 const REPLY: ModelReply = {
-  text: 'Hola, soy el asistente virtual de Saba. Catia queda en la Av. Sucre.',
+  kind: 'answer',
+  text: ANSWER_TEXT,
   model: 'claude-sonnet-5-5',
   usage: {
     inputTokens: 40,
@@ -63,7 +71,7 @@ const REPLY: ModelReply = {
 
 const sendText = vi.fn<(to: string, body: string) => Promise<string>>();
 const reply = vi.fn<AssistantModelPort['reply']>();
-const currentStores = vi.fn<() => Promise<Store[] | null>>();
+const currentStores = vi.fn<() => Promise<StoresSnapshot>>();
 
 function customerMessage(
   wamid: string,
@@ -153,7 +161,9 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
     now = new Date((CUSTOMER_SENT_AT + 60) * 1000);
     sendText.mockReset().mockResolvedValue('wamid.OUT1');
     reply.mockReset().mockResolvedValue(REPLY);
-    currentStores.mockReset().mockResolvedValue([CATIA]);
+    currentStores
+      .mockReset()
+      .mockResolvedValue({ stores: [CATIA], misconfigured: false });
   });
 
   it('answers with the stores in the instructions and records the turn', async () => {
@@ -171,14 +181,14 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
     ]);
 
     expect(sendText).toHaveBeenCalledTimes(1);
-    expect(sendText).toHaveBeenCalledWith('584140000001', REPLY.text);
+    expect(sendText).toHaveBeenCalledWith('584140000001', ANSWER_TEXT);
 
     const sent = await getTestDb()
       .select()
       .from(whatsappMessages)
       .where(eq(whatsappMessages.source, 'assistant'));
     expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({ body: REPLY.text, sentBy: null });
+    expect(sent[0]).toMatchObject({ body: ANSWER_TEXT, sentBy: null });
 
     const [inbound] = await getTestDb()
       .select()
@@ -256,7 +266,7 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
 
   it('answers without store data when Saba never answered, with the instructions saying so', async () => {
     await turnOn();
-    currentStores.mockResolvedValue(null);
+    currentStores.mockResolvedValue({ stores: null, misconfigured: false });
 
     await receive(textMessage('¿Dónde queda Catia?'));
     await waitForRun();
@@ -265,25 +275,91 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
     expect(input?.instructions).toContain('No tienes datos de sedes');
   });
 
-  it('records the failure and sends nothing when the model fails', async () => {
+  async function conversation() {
+    const [row] = await getTestDb().select().from(whatsappConversations);
+    if (!row) throw new Error('sin conversación');
+    return row;
+  }
+
+  /** The notice went out, the chat is marked for a person and the run says why. */
+  async function expectHandoff(reason: string) {
+    const run = await waitForRun();
+    expect(sendText).toHaveBeenCalledWith('584140000001', HANDOFF_NOTICE);
+    expect(await conversation()).toMatchObject({
+      handoffReason: reason,
+      assignedTo: null,
+    });
+    expect((await conversation()).handoffRequestedAt).not.toBeNull();
+    expect(run).toMatchObject({ outcome: 'handoff', reason });
+    return run;
+  }
+
+  it.each([
+    'out_of_scope',
+    'customer_requested',
+    'data_not_found',
+    'pricing',
+    'out_of_stock',
+  ] as const)('hands over when the model chooses %s', async (reason) => {
+    await turnOn();
+    reply.mockResolvedValue({ ...REPLY, kind: 'handoff', reason });
+
+    await receive(textMessage('¿cuánto cuesta la moto?'));
+
+    await expectHandoff(reason);
+  });
+
+  it('stays silent after handing over, even if the customer keeps writing', async () => {
+    await turnOn();
+    reply.mockResolvedValue({ ...REPLY, kind: 'handoff', reason: 'pricing' });
+    await receive(textMessage('¿cuánto cuesta?', 'wamid.A'));
+    await waitForRun();
+    reply.mockClear();
+    sendText.mockClear();
+
+    await receive(textMessage('¿hola?', 'wamid.B'));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(reply).not.toHaveBeenCalled();
+    expect(sendText).not.toHaveBeenCalled();
+    expect(await getTestDb().select().from(assistantRuns)).toHaveLength(1);
+  });
+
+  it('hands over with error when the model fails, without technical details', async () => {
     await turnOn();
     reply.mockRejectedValue(
       new ModelUnavailableError('api_error', 'Anthropic 529: overloaded')
     );
 
     await receive(textMessage('hola'));
-    const run = await waitForRun();
 
-    expect(sendText).not.toHaveBeenCalled();
-    expect(run).toMatchObject({
-      outcome: 'error',
-      reason: 'api_error',
-      errorDetail: 'Anthropic 529: overloaded',
-      sentMessageId: null,
-    });
+    const run = await expectHandoff('error');
+    expect(run.errorDetail).toBe('api_error: Anthropic 529: overloaded');
+    expect(sendText).toHaveBeenCalledTimes(1);
   });
 
-  it('leaves non-text messages alone', async () => {
+  it('hands over with error on a refusal', async () => {
+    await turnOn();
+    reply.mockRejectedValue(
+      new ModelUnavailableError('refusal', 'el modelo se negó a responder')
+    );
+
+    await receive(textMessage('hola'));
+
+    await expectHandoff('error');
+  });
+
+  it('hands over with error when Saba rejects the assistant key', async () => {
+    await turnOn();
+    currentStores.mockResolvedValue({ stores: null, misconfigured: true });
+
+    await receive(textMessage('¿Dónde queda Catia?'));
+
+    await expectHandoff('error');
+    expect(reply).not.toHaveBeenCalled();
+  });
+
+  it('hands over a message that is not text', async () => {
     await turnOn();
 
     await receive(
@@ -292,10 +368,9 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
         image: { id: 'media-1', mime_type: 'image/jpeg' },
       })
     );
-    await new Promise((resolve) => setTimeout(resolve, 50));
 
+    await expectHandoff('non_text');
     expect(reply).not.toHaveBeenCalled();
-    expect(await getTestDb().select().from(assistantRuns)).toEqual([]);
   });
 
   it('does not answer outside the 24 h window', async () => {

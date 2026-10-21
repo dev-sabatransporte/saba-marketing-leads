@@ -1,4 +1,4 @@
-export type TurnResult = 'disabled' | 'ignored' | 'answered' | 'error';
+export type TurnResult = 'disabled' | 'ignored' | 'answered' | 'handoff';
 
 export interface HandleInboundMessagePort {
   execute(input: {

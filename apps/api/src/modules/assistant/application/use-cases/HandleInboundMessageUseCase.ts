@@ -6,6 +6,7 @@ import {
   toModelTurns,
   withinReplyWindow,
 } from '../../domain/conversation';
+import { HANDOFF_NOTICE, type HandoffReason } from '../../domain/handoff';
 import { buildInstructions } from '../../domain/instructions';
 import { ASSISTANT_TOKENS } from '../../tokens';
 import type {
@@ -25,10 +26,16 @@ import type { StoresSourcePort } from '../ports/out/StoresSourcePort';
 // Enough context for a short WhatsApp exchange without paying for old chats.
 const HISTORY_LIMIT = 20;
 
+type RunFields = Pick<
+  NewAssistantRun,
+  'sentMessageId' | 'outcome' | 'reason' | 'errorDetail' | 'model' | 'usage'
+>;
+
 /**
- * One assistant turn: a customer text message in, at most one message out,
- * and a row in `assistant_runs` for every attempt. Switched off, or with
- * nothing it can answer, it does nothing and records nothing.
+ * One assistant turn: a customer message in, at most one message out, and a
+ * row in `assistant_runs` for every attempt. When it must not or cannot
+ * answer it hands the chat to a person ("Necesita asesor") and goes silent
+ * until then. Switched off, or with nothing pending, it does nothing.
  */
 @Injectable()
 export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
@@ -55,71 +62,81 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
     // Read on every turn: switching it off applies to the next message.
     const { enabled } = await this.settings.get();
     if (!enabled) return 'disabled';
-    if (type !== 'text') return 'ignored';
 
     const chat = await this.channel.read(conversationId, HISTORY_LIMIT);
     if (
       !chat?.waId ||
+      chat.handoffRequestedAt ||
       !withinReplyWindow(chat.lastInboundAt, this.clock.now())
     ) {
       return 'ignored';
     }
     // Several messages at once: only the newest one's turn answers them all.
     if (!isLatestCustomerMessage(chat.messages, messageId)) return 'ignored';
-    const turns = toModelTurns(chat.messages);
-    if (!turns.length) return 'ignored';
 
     const startedAt = this.clock.now().getTime();
-    const run = (
-      fields: Pick<
-        NewAssistantRun,
-        | 'sentMessageId'
-        | 'outcome'
-        | 'reason'
-        | 'errorDetail'
-        | 'model'
-        | 'usage'
-      >
-    ): Promise<void> =>
+    const run = (fields: RunFields): Promise<void> =>
       this.runs.record({
         conversationId,
         inboundMessageIds: [messageId],
         latencyMs: this.clock.now().getTime() - startedAt,
         ...fields,
       });
+    const handOver = (
+      reason: HandoffReason,
+      details: Pick<RunFields, 'errorDetail' | 'model' | 'usage'>
+    ): Promise<TurnResult> =>
+      this.handOver(conversationId, reason, details, run);
 
-    let answer: ModelReply;
+    if (type !== 'text') {
+      return handOver('non_text', {
+        errorDetail: null,
+        model: null,
+        usage: null,
+      });
+    }
+    const turns = toModelTurns(chat.messages);
+    if (!turns.length) return 'ignored';
+
+    const { stores, misconfigured } = await this.stores.current();
+    if (misconfigured) {
+      return handOver('error', {
+        errorDetail: 'Saba rechazó la llave del asistente o falta configurarla',
+        model: null,
+        usage: null,
+      });
+    }
+
+    let reply: ModelReply;
     try {
-      const instructions = buildInstructions(await this.stores.current());
-      answer = await this.model.reply({ instructions, turns });
+      reply = await this.model.reply({
+        instructions: buildInstructions(stores),
+        turns,
+      });
     } catch (error: unknown) {
       const unavailable = error instanceof ModelUnavailableError ? error : null;
-      await run({
-        sentMessageId: null,
-        outcome: 'error',
-        reason: unavailable?.reason ?? 'model_failed',
-        errorDetail: error instanceof Error ? error.message : String(error),
+      const detail = error instanceof Error ? error.message : String(error);
+      return handOver('error', {
+        errorDetail: unavailable ? `${unavailable.reason}: ${detail}` : detail,
         model: unavailable?.billed?.model ?? null,
         usage: unavailable?.billed?.usage ?? null,
       });
-      return 'error';
+    }
+    const billed = { model: reply.model, usage: reply.usage };
+    if (reply.kind === 'handoff') {
+      return handOver(reply.reason, { errorDetail: null, ...billed });
     }
 
     let sentMessageId: string;
     try {
       sentMessageId = (
-        await this.channel.sendAsAssistant(conversationId, answer.text)
+        await this.channel.sendAsAssistant(conversationId, reply.text)
       ).id;
     } catch (error: unknown) {
-      await run({
-        sentMessageId: null,
-        outcome: 'error',
-        reason: 'send_failed',
-        errorDetail: error instanceof Error ? error.message : String(error),
-        model: answer.model,
-        usage: answer.usage,
+      return handOver('error', {
+        errorDetail: `send_failed: ${error instanceof Error ? error.message : String(error)}`,
+        ...billed,
       });
-      return 'error';
     }
 
     // Outside the try: a failure here must not log a reply that did go out as failed.
@@ -128,9 +145,40 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
       outcome: 'answered',
       reason: null,
       errorDetail: null,
-      model: answer.model,
-      usage: answer.usage,
+      ...billed,
     });
     return 'answered';
+  }
+
+  /**
+   * Tells the customer with a fixed text, marks the chat for a person and
+   * records why. The mark goes in even if the notice fails: someone has to
+   * pick the chat up either way.
+   */
+  private async handOver(
+    conversationId: string,
+    reason: HandoffReason,
+    details: Pick<RunFields, 'errorDetail' | 'model' | 'usage'>,
+    run: (fields: RunFields) => Promise<void>
+  ): Promise<TurnResult> {
+    let sentMessageId: string | null = null;
+    let noticeError: string | null = null;
+    try {
+      sentMessageId = (
+        await this.channel.sendAsAssistant(conversationId, HANDOFF_NOTICE)
+      ).id;
+    } catch (error: unknown) {
+      noticeError = `aviso no enviado: ${error instanceof Error ? error.message : String(error)}`;
+    }
+    await this.channel.requestHandoff(conversationId, reason);
+    await run({
+      ...details,
+      sentMessageId,
+      outcome: 'handoff',
+      reason,
+      errorDetail:
+        [details.errorDetail, noticeError].filter(Boolean).join('; ') || null,
+    });
+    return 'handoff';
   }
 }

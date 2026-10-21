@@ -51,14 +51,17 @@ describe('HttpSabaAssistantStores', () => {
       reply(200, { ok: true, stores: [CATIA] }),
     ]);
 
-    expect(await stores.current()).toEqual([
-      {
-        name: 'Catia',
-        address: 'Av. Sucre',
-        mapUrl: 'https://maps.app.goo.gl/x',
-        publicHours: 'Lunes a viernes 8:00 a. m. a 5:00 p. m.',
-      },
-    ]);
+    expect(await stores.current()).toEqual({
+      stores: [
+        {
+          name: 'Catia',
+          address: 'Av. Sucre',
+          mapUrl: 'https://maps.app.goo.gl/x',
+          publicHours: 'Lunes a viernes 8:00 a. m. a 5:00 p. m.',
+        },
+      ],
+      misconfigured: false,
+    });
     const [url, init] = fetchMock.mock.calls[0] as unknown as [
       URL,
       RequestInit,
@@ -76,11 +79,11 @@ describe('HttpSabaAssistantStores', () => {
 
     await stores.current();
     advance(4 * 60 * 1000);
-    expect(await stores.current()).toHaveLength(1);
+    expect((await stores.current()).stores).toHaveLength(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     advance(2 * 60 * 1000);
-    expect(await stores.current()).toEqual([]);
+    expect((await stores.current()).stores).toEqual([]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -93,9 +96,9 @@ describe('HttpSabaAssistantStores', () => {
 
     await stores.current();
     advance(6 * 60 * 1000);
-    expect(await stores.current()).toHaveLength(1);
+    expect((await stores.current()).stores).toHaveLength(1);
     advance(2 * 60 * 1000);
-    expect(await stores.current()).toHaveLength(1);
+    expect((await stores.current()).stores).toHaveLength(1);
     expect(logger.warn).toHaveBeenCalled();
   });
 
@@ -105,21 +108,27 @@ describe('HttpSabaAssistantStores', () => {
       reply(200, { ok: true, stores: [CATIA] }),
     ]);
 
-    expect(await stores.current()).toBeNull();
+    expect((await stores.current()).stores).toBeNull();
     advance(30 * 1000);
-    expect(await stores.current()).toBeNull();
+    expect((await stores.current()).stores).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     advance(31 * 1000);
-    expect(await stores.current()).toHaveLength(1);
+    expect((await stores.current()).stores).toHaveLength(1);
   });
 
-  it('reports a rejected key as a configuration error', async () => {
-    const { stores, logger } = setup([
+  it('reports a rejected key as a configuration error and stops asking', async () => {
+    const { stores, logger, fetchMock, advance } = setup([
+      reply(200, { ok: true, stores: [CATIA] }),
       reply(401, { ok: false, code: 'invalid_assistant_key' }),
     ]);
 
-    expect(await stores.current()).toBeNull();
+    await stores.current();
+    advance(6 * 60 * 1000);
+    expect(await stores.current()).toMatchObject({ misconfigured: true });
+    advance(60 * 60 * 1000);
+    expect(await stores.current()).toMatchObject({ misconfigured: true });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(logger.error).toHaveBeenCalledWith(
       expect.stringContaining('SABA_ASSISTANT_KEY'),
       undefined,
@@ -129,7 +138,7 @@ describe('HttpSabaAssistantStores', () => {
 
   it('treats an unexpected answer as Saba failing', async () => {
     const { stores } = setup([reply(200, { ok: true, sedes: [] })]);
-    expect(await stores.current()).toBeNull();
+    expect((await stores.current()).stores).toBeNull();
   });
 
   it('does not call Saba without configuration', async () => {
@@ -142,7 +151,10 @@ describe('HttpSabaAssistantStores', () => {
       logger
     );
 
-    expect(await stores.current()).toBeNull();
+    expect(await stores.current()).toEqual({
+      stores: null,
+      misconfigured: true,
+    });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(logger.error).toHaveBeenCalled();
   });

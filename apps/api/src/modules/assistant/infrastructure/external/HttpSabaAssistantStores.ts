@@ -2,7 +2,10 @@ import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import type { StructuredLogger } from '../../../../infrastructure/logging/StructuredLogger';
 import type { ClockPort } from '../../application/ports/out/ClockPort';
-import type { StoresSourcePort } from '../../application/ports/out/StoresSourcePort';
+import type {
+  StoresSnapshot,
+  StoresSourcePort,
+} from '../../application/ports/out/StoresSourcePort';
 import type { Store } from '../../domain/instructions';
 import { ASSISTANT_TOKENS } from '../../tokens';
 import type { AssistantConfig } from '../assistantConfig';
@@ -40,6 +43,8 @@ export class HttpSabaAssistantStores implements StoresSourcePort {
   private stores: Store[] | null = null;
   private loadedAt = 0;
   private failedAt = 0;
+  // A rejected key does not fix itself: no more calls until a restart with the right key.
+  private misconfigured = false;
 
   constructor(
     @Inject(ASSISTANT_TOKENS.Config)
@@ -51,20 +56,21 @@ export class HttpSabaAssistantStores implements StoresSourcePort {
     @Inject(ASSISTANT_TOKENS.Logger) private readonly logger: Logger
   ) {}
 
-  async current(): Promise<Store[] | null> {
+  async current(): Promise<StoresSnapshot> {
     const now = this.clock.now().getTime();
     const fresh = this.stores !== null && now - this.loadedAt < FRESH_MS;
     const coolingDown = now - this.failedAt < RETRY_AFTER_FAILURE_MS;
-    if (fresh || coolingDown) return this.stores;
-
-    try {
-      this.stores = await this.fetchStores();
-      this.loadedAt = now;
-    } catch (error: unknown) {
-      this.failedAt = now;
-      this.report(error);
+    if (!this.misconfigured && !fresh && !coolingDown) {
+      try {
+        this.stores = await this.fetchStores();
+        this.loadedAt = now;
+      } catch (error: unknown) {
+        this.failedAt = now;
+        if (error instanceof SabaConfigError) this.misconfigured = true;
+        this.report(error);
+      }
     }
-    return this.stores;
+    return { stores: this.stores, misconfigured: this.misconfigured };
   }
 
   private async fetchStores(): Promise<Store[]> {
@@ -95,7 +101,7 @@ export class HttpSabaAssistantStores implements StoresSourcePort {
 
   private report(error: unknown): void {
     if (error instanceof SabaConfigError) {
-      // Configuration, not an outage: retrying does not fix it.
+      // Configuration, not an outage: it is not retried, the chat goes to a person.
       void this.logger.error(
         `sedes del asistente: ${error.message}; revisar SABA_ASSISTANT_KEY (= ASSISTANT_SERVICE_KEY de Saba)`,
         undefined,

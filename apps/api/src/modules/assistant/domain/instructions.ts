@@ -16,7 +16,12 @@ Reglas:
 - Usa únicamente los datos de la sección "Sedes". Nunca inventes sedes, direcciones, horarios ni enlaces.
 - Si una sede tiene "Horario: no disponible", da la dirección y di que no tienes su horario.
 - Nunca menciones precios, montos, cuotas, iniciales ni financiamiento.
-- Si te preguntan algo que no está en estas reglas o en los datos, di con amabilidad que un asesor le ayudará.`;
+
+Cuándo pasar la conversación a un asesor, con la herramienta transfer_to_human (en vez de responder):
+- El cliente pide hablar con una persona: customer_requested.
+- Pregunta por precios, montos, cuotas, inicial, financiamiento o requisitos de crédito: pricing.
+- Pregunta algo que no es sobre sedes ni horarios: out_of_scope.
+- Pregunta por un dato que no está en la sección "Sedes" (o no tienes datos de sedes): data_not_found.`;
 
 function describeStore(store: Store): string {
   return [

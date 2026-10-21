@@ -1,17 +1,36 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { Inject, Injectable } from '@nestjs/common';
+import { z } from 'zod';
 import type {
   AssistantModelPort,
   ModelReply,
 } from '../../application/ports/out/AssistantModelPort';
 import { ModelUnavailableError } from '../../domain/AssistantErrors';
 import type { ModelTurn } from '../../domain/conversation';
+import { MODEL_HANDOFF_REASONS } from '../../domain/handoff';
 import { ASSISTANT_TOKENS } from '../../tokens';
 import type { AssistantConfig } from '../assistantConfig';
 
 // A WhatsApp reply is short; the cap only stops a runaway answer.
 const MAX_TOKENS = 1024;
 const TIMEOUT_MS = 30_000;
+
+const TRANSFER_TO_HUMAN = {
+  name: 'transfer_to_human',
+  description:
+    'Pasa la conversación a un asesor de Saba. Úsala en vez de responder cuando el cliente pide hablar con una persona, pregunta por precios, montos o financiamiento, pregunta algo fuera de sedes y horarios, o cuando el dato no está en tus instrucciones.',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      reason: { type: 'string', enum: [...MODEL_HANDOFF_REASONS] },
+    },
+    required: ['reason'],
+    additionalProperties: false,
+  },
+  strict: true,
+};
+
+const transferInputSchema = z.object({ reason: z.enum(MODEL_HANDOFF_REASONS) });
 
 @Injectable()
 export class AnthropicAssistantModel implements AssistantModelPort {
@@ -46,12 +65,15 @@ export class AnthropicAssistantModel implements AssistantModelPort {
       );
     }
 
-    let response: Anthropic.Message;
+    let response: Anthropic.Beta.BetaMessage;
     try {
-      response = await this.client.messages.create({
+      response = await this.client.beta.messages.create({
         model: this.config.model,
         max_tokens: MAX_TOKENS,
-        // Stable prefix (rules + stores), cached between turns.
+        // A refusal is retried on Anthropic's recommended model in the same call.
+        betas: ['server-side-fallback-2026-07-01'],
+        fallbacks: 'default',
+        // Stable prefix (tools + rules + stores), cached between turns.
         system: [
           {
             type: 'text',
@@ -59,6 +81,9 @@ export class AnthropicAssistantModel implements AssistantModelPort {
             cache_control: { type: 'ephemeral' },
           },
         ],
+        tools: [TRANSFER_TO_HUMAN],
+        // Forcing a tool is a 400 on this model family: the model decides.
+        tool_choice: { type: 'auto' },
         messages: turns.map((t) => ({ role: t.role, content: t.content })),
         output_config: { effort: 'low' },
       });
@@ -88,6 +113,23 @@ export class AnthropicAssistantModel implements AssistantModelPort {
         billed
       );
     }
+
+    const transfer = response.content.find(
+      (block) =>
+        block.type === 'tool_use' && block.name === TRANSFER_TO_HUMAN.name
+    );
+    if (transfer?.type === 'tool_use') {
+      const input = transferInputSchema.safeParse(transfer.input);
+      if (!input.success) {
+        throw new ModelUnavailableError(
+          'empty',
+          'transfer_to_human con un motivo desconocido',
+          billed
+        );
+      }
+      return { kind: 'handoff', reason: input.data.reason, ...billed };
+    }
+
     const text = response.content
       .flatMap((block) => (block.type === 'text' ? [block.text] : []))
       .join('')
@@ -99,7 +141,6 @@ export class AnthropicAssistantModel implements AssistantModelPort {
         billed
       );
     }
-
-    return { text, ...billed };
+    return { kind: 'answer', text, ...billed };
   }
 }
