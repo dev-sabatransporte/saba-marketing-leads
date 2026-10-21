@@ -9,8 +9,8 @@ import type {
 import type { Store } from '../../domain/instructions';
 import { ASSISTANT_TOKENS } from '../../tokens';
 import type { AssistantConfig } from '../assistantConfig';
+import { getFromSabaAssistant, SabaConfigError } from './sabaAssistantApi';
 
-const TIMEOUT_MS = 5_000;
 const FRESH_MS = 5 * 60 * 1000;
 // While Saba fails, each turn would otherwise wait the full timeout.
 const RETRY_AFTER_FAILURE_MS = 60 * 1000;
@@ -29,9 +29,6 @@ const responseSchema = z.object({
 });
 
 type Logger = Pick<StructuredLogger, 'warn' | 'error'>;
-
-/** Missing or rejected assistant key: configuration, not an outage. */
-class SabaConfigError extends Error {}
 
 /**
  * Active stores from Saba's assistant endpoints (own key, never the marketing
@@ -74,24 +71,12 @@ export class HttpSabaAssistantStores implements StoresSourcePort {
   }
 
   private async fetchStores(): Promise<Store[]> {
-    const { sabaApiUrl, sabaAssistantKey } = this.config;
-    if (!sabaApiUrl || !sabaAssistantKey) {
-      throw new SabaConfigError('faltan SABA_API_URL o SABA_ASSISTANT_KEY');
-    }
-    const response = await fetch(
-      new URL(`${sabaApiUrl}/api/assistant/stores`),
-      {
-        headers: { 'X-Saba-Assistant-Key': sabaAssistantKey },
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-      }
+    const { stores } = await getFromSabaAssistant(
+      this.config,
+      '/api/assistant/stores',
+      responseSchema
     );
-    if (response.status === 401) {
-      throw new SabaConfigError('Saba rechazó la llave del asistente');
-    }
-    if (!response.ok) throw new Error(`Saba respondió ${response.status}`);
-    const parsed = responseSchema.safeParse(await response.json());
-    if (!parsed.success) throw new Error('respuesta inesperada de Saba');
-    return parsed.data.stores.map((s) => ({
+    return stores.map((s) => ({
       name: s.name,
       address: s.address,
       mapUrl: s.map_url,
