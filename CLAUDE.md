@@ -115,6 +115,7 @@ Estándares generales del repo (se cargan por referencia):
 
 @.claude/rules/git-workflow.md
 @.claude/rules/typescript.md
+@.claude/rules/tickets.md
 
 Cada app tiene además sus reglas propias en `apps/api/.claude/rules/` y
 `apps/client/.claude/rules/`, referenciadas desde su `CLAUDE.md`.
