@@ -6,7 +6,10 @@ import { HandleInboundMessageUseCase } from '../../modules/assistant/application
 import { ModelUnavailableError } from '../../modules/assistant/domain/AssistantErrors';
 import type { NewAssistantRun } from '../../modules/assistant/domain/AssistantRun';
 import { DEFAULT_ASSISTANT_SETTINGS } from '../../modules/assistant/domain/AssistantSettings';
-import { HANDOFF_NOTICE } from '../../modules/assistant/domain/handoff';
+import {
+  HANDOFF_NOTICE,
+  handoffNotice,
+} from '../../modules/assistant/domain/handoff';
 
 const NOW = new Date('2026-10-21T15:00:00Z');
 const USAGE = {
@@ -181,6 +184,47 @@ describe('HandleInboundMessageUseCase', () => {
         outcome: 'handoff',
         reason: 'pricing',
         sentMessageId: 'out-1',
+        usage: USAGE,
+      })
+    );
+  });
+
+  it('tells the customer the model is carried when it is out of stock', async () => {
+    const { turn, send, requestHandoff } = setup({
+      reply: vi.fn(
+        async (): Promise<ModelReply> => ({
+          kind: 'handoff',
+          reason: 'out_of_stock',
+          model: 'claude-sonnet-5-5',
+          usage: USAGE,
+        })
+      ),
+    });
+
+    expect(await turn()).toBe('handoff');
+    expect(requestHandoff).toHaveBeenCalledWith('c-1', 'out_of_stock');
+    expect(send).toHaveBeenCalledWith('c-1', handoffNotice('out_of_stock'));
+  });
+
+  it('never sends an answer with an amount: it hands over for pricing', async () => {
+    const { turn, send, requestHandoff, record } = setup({
+      reply: vi.fn(
+        async (): Promise<ModelReply> => ({
+          ...ANSWER,
+          text: 'La Bera SBR 150 cuesta $1.200.',
+        })
+      ),
+    });
+
+    expect(await turn()).toBe('handoff');
+    expect(requestHandoff).toHaveBeenCalledWith('c-1', 'pricing');
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledWith('c-1', HANDOFF_NOTICE);
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outcome: 'handoff',
+        reason: 'pricing',
+        errorDetail: expect.stringContaining('monto'),
         usage: USAGE,
       })
     );

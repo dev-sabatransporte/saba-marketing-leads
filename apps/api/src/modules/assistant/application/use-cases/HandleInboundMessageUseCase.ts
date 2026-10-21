@@ -8,7 +8,11 @@ import {
   toModelTurns,
   withinReplyWindow,
 } from '../../domain/conversation';
-import { HANDOFF_NOTICE, type HandoffReason } from '../../domain/handoff';
+import {
+  type HandoffReason,
+  handoffNotice,
+  mentionsAnAmount,
+} from '../../domain/handoff';
 import { buildInstructions } from '../../domain/instructions';
 import { ASSISTANT_TOKENS } from '../../tokens';
 import type {
@@ -146,6 +150,12 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
     if (reply.kind === 'handoff') {
       return handOver(reply.reason, { errorDetail: null, ...billed });
     }
+    if (mentionsAnAmount(reply.text)) {
+      return handOver('pricing', {
+        errorDetail: 'la respuesta mencionaba un monto; no se envió',
+        ...billed,
+      });
+    }
 
     let sentMessageId: string;
     try {
@@ -187,7 +197,10 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
     let noticeError: string | null = null;
     try {
       sentMessageId = (
-        await this.channel.sendAsAssistant(conversationId, HANDOFF_NOTICE)
+        await this.channel.sendAsAssistant(
+          conversationId,
+          handoffNotice(reason)
+        )
       ).id;
     } catch (error: unknown) {
       noticeError = `aviso no enviado: ${describe(error)}`;

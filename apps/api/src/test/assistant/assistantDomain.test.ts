@@ -5,7 +5,11 @@ import {
   toModelTurns,
   withinReplyWindow,
 } from '../../modules/assistant/domain/conversation';
-import { HANDOFF_NOTICE } from '../../modules/assistant/domain/handoff';
+import {
+  HANDOFF_NOTICE,
+  handoffNotice,
+  mentionsAnAmount,
+} from '../../modules/assistant/domain/handoff';
 import { buildInstructions } from '../../modules/assistant/domain/instructions';
 
 let nextId = 0;
@@ -125,6 +129,50 @@ describe('toModelTurns after a handoff', () => {
         line('customer', 'Hola'),
       ])
     ).toEqual([{ role: 'user', content: 'Hola' }]);
+  });
+
+  it('also starts fresh after an out-of-stock notice', () => {
+    expect(
+      toModelTurns([
+        line('customer', '¿tienen la Bera SBR?'),
+        line('assistant', handoffNotice('out_of_stock')),
+        line('customer', 'gracias'),
+      ])
+    ).toEqual([{ role: 'user', content: 'gracias' }]);
+  });
+});
+
+describe('handoffNotice', () => {
+  it('says the model is carried when it is out of stock', () => {
+    expect(handoffNotice('out_of_stock')).toContain('lo manejamos');
+    expect(handoffNotice('out_of_stock')).toContain('asesor');
+  });
+
+  it('is the plain notice for every other reason', () => {
+    expect(handoffNotice('pricing')).toBe(HANDOFF_NOTICE);
+    expect(handoffNotice('error')).toBe(HANDOFF_NOTICE);
+  });
+});
+
+describe('mentionsAnAmount', () => {
+  it.each([
+    'Cuesta $1.200',
+    'La inicial es de 300 USD',
+    'Son US$ 80 al mes',
+    'Bs. 4.500',
+    'unos 200 dólares',
+    'cuesta 1.000 bolívares',
+    '50 €',
+  ])('catches "%s"', (text) => {
+    expect(mentionsAnAmount(text)).toBe(true);
+  });
+
+  it.each([
+    'Sí, tenemos la Bera SBR 150 en stock.',
+    'La sede de Catia abre de 8:00 a. m. a 5:00 p. m.',
+    'Manejamos la Empire Keeway 2026',
+  ])('lets "%s" through', (text) => {
+    expect(mentionsAnAmount(text)).toBe(false);
   });
 });
 

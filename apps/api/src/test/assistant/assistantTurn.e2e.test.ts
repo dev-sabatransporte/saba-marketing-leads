@@ -20,7 +20,11 @@ import type {
 } from '../../modules/assistant/application/ports/out/AssistantModelPort';
 import type { StoresSnapshot } from '../../modules/assistant/application/ports/out/StoresSourcePort';
 import { ModelUnavailableError } from '../../modules/assistant/domain/AssistantErrors';
-import { HANDOFF_NOTICE } from '../../modules/assistant/domain/handoff';
+import {
+  HANDOFF_NOTICE,
+  type HandoffReason,
+  handoffNotice,
+} from '../../modules/assistant/domain/handoff';
 import type { Store } from '../../modules/assistant/domain/instructions';
 import {
   assistantRuns,
@@ -289,9 +293,12 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
   }
 
   /** The notice went out, the chat is marked for a person and the run says why. */
-  async function expectHandoff(reason: string) {
+  async function expectHandoff(reason: HandoffReason) {
     const run = await waitForRun();
-    expect(sendText).toHaveBeenCalledWith('584140000001', HANDOFF_NOTICE);
+    expect(sendText).toHaveBeenCalledWith(
+      '584140000001',
+      handoffNotice(reason)
+    );
     expect(await conversation()).toMatchObject({
       handoffReason: reason,
       assignedTo: null,

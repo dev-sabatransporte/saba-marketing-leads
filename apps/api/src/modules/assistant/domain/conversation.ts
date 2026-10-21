@@ -1,4 +1,4 @@
-import { HANDOFF_NOTICE } from './handoff';
+import { isHandoffNotice } from './handoff';
 
 const WINDOW_MS = 24 * 60 * 60 * 1000;
 
@@ -36,7 +36,7 @@ export interface ModelTurn {
  */
 export function toModelTurns(lines: ChatLine[]): ModelTurn[] {
   const lastHandoff = lines.findLastIndex(
-    (l) => l.source === 'assistant' && l.body === HANDOFF_NOTICE
+    (l) => l.source === 'assistant' && isHandoffNotice(l.body)
   );
   const turns: ModelTurn[] = [];
   for (const { source, type, body, status } of lines.slice(lastHandoff + 1)) {
