@@ -3,6 +3,7 @@ import { BusModule } from './bus.module';
 import { DrizzleModule } from './infrastructure/database/drizzle.module';
 import { ErrorsModule } from './infrastructure/errors/ErrorsModule';
 import { LoggingModule } from './infrastructure/logging/LoggingModule';
+import { AssistantModule } from './modules/assistant/module';
 import { AuthModule } from './modules/auth/module';
 import { HealthModule } from './modules/health/module';
 import { LeadsModule } from './modules/leads/module';
@@ -19,6 +20,7 @@ import { SecurityModule } from './security.module';
     AuthModule,
     LeadsModule,
     WhatsAppModule,
+    AssistantModule,
     HealthModule,
   ],
   controllers: [],
