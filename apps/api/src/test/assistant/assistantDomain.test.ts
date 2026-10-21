@@ -284,6 +284,19 @@ describe('withMapLinks', () => {
     );
   });
 
+  it('does not take a store whose name is inside a longer one the reply names', () => {
+    const catiaLaMar = store('Catia La Mar', 'https://maps.app.goo.gl/lamar');
+
+    expect(
+      withMapLinks('Catia La Mar abre a las 8.', [CATIA, catiaLaMar])
+    ).toBe(
+      'Catia La Mar abre a las 8.\n\n📍 Catia La Mar: https://maps.app.goo.gl/lamar'
+    );
+    expect(
+      withMapLinks('Catia y Catia La Mar abren a las 8.', [CATIA, catiaLaMar])
+    ).toContain('📍 Catia: https://maps.app.goo.gl/catia\n📍 Catia La Mar');
+  });
+
   it('leaves the reply alone when it names no store', () => {
     expect(withMapLinks('Sí, tenemos la Bera SBR 150.', [CATIA])).toBe(
       'Sí, tenemos la Bera SBR 150.'

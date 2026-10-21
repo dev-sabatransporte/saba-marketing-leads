@@ -11,12 +11,30 @@ function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function names(text: string, store: Store): boolean {
-  const name = escapeRegExp(fold(store.name.trim()));
-  return (
-    name.length > 0 &&
-    new RegExp(`(?<![\\p{L}\\p{N}])${name}(?![\\p{L}\\p{N}])`, 'u').test(text)
+function nameMatcher(name: string): RegExp | null {
+  const folded = escapeRegExp(fold(name.trim()));
+  return folded
+    ? new RegExp(`(?<![\\p{L}\\p{N}])${folded}(?![\\p{L}\\p{N}])`, 'gu')
+    : null;
+}
+
+/**
+ * Longest names first, blanking each match: naming "Catia La Mar" must not
+ * also count as naming "Catia".
+ */
+function namedStores(text: string, stores: Store[]): Store[] {
+  let rest = fold(text);
+  const named = new Set<Store>();
+  const longestFirst = [...stores].sort(
+    (a, b) => b.name.length - a.name.length
   );
+  for (const store of longestFirst) {
+    const matcher = nameMatcher(store.name);
+    if (!matcher?.test(rest)) continue;
+    named.add(store);
+    rest = rest.replace(matcher, ' ');
+  }
+  return stores.filter((store) => named.has(store));
 }
 
 /**
@@ -24,8 +42,7 @@ function names(text: string, store: Store): boolean {
  * or writes the URLs: copied by hand they cost output and come out altered.
  */
 export function withMapLinks(text: string, stores: Store[] | null): string {
-  const folded = fold(text);
-  const named = (stores ?? []).filter((store) => names(folded, store));
+  const named = namedStores(text, stores ?? []);
   if (named.length > MAX_LINKED_STORES) return text;
   const lines = named.flatMap((store) =>
     store.mapUrl ? [`📍 ${store.name}: ${store.mapUrl}`] : []
