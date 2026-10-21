@@ -1,12 +1,13 @@
 import type { TokenUsage } from './AssistantRun';
 
-/** The model did not give a usable reply: not configured, API error, refusal, empty text or a malformed tool call. */
+/** The model did not give a usable reply: not configured, API error, refusal, cut off at the output cap, empty text or a malformed tool call. */
 export class ModelUnavailableError extends Error {
   constructor(
     readonly reason:
       | 'not_configured'
       | 'api_error'
       | 'refusal'
+      | 'truncated'
       | 'empty'
       | 'invalid_tool_input',
     detail: string,

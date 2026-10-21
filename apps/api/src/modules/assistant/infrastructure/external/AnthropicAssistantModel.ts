@@ -12,8 +12,10 @@ import { MODEL_HANDOFF_REASONS } from '../../domain/handoff';
 import { ASSISTANT_TOKENS } from '../../tokens';
 import type { AssistantConfig } from '../assistantConfig';
 
-// A WhatsApp reply is short; the cap only stops a runaway answer.
+// A WhatsApp reply is short; the full cap only stops a runaway answer.
 const MAX_TOKENS = 1024;
+// One or two sentences fit with room to spare; output tokens are the expensive ones.
+const SIMPLE_MAX_TOKENS = 300;
 const TIMEOUT_MS = 30_000;
 
 const SEARCH_PRODUCTS = {
@@ -112,10 +114,12 @@ export class AnthropicAssistantModel implements AssistantModelPort {
     instructions,
     turns,
     searches,
+    simpleReplies,
   }: {
     instructions: string;
     turns: ModelTurn[];
     searches: ProductSearch[];
+    simpleReplies: boolean;
   }): Promise<ModelReply> {
     if (!this.client) {
       throw new ModelUnavailableError(
@@ -128,7 +132,7 @@ export class AnthropicAssistantModel implements AssistantModelPort {
     try {
       response = await this.client.beta.messages.create({
         model: this.config.model,
-        max_tokens: MAX_TOKENS,
+        max_tokens: simpleReplies ? SIMPLE_MAX_TOKENS : MAX_TOKENS,
         // A refusal is retried on Anthropic's recommended model in the same call.
         betas: ['server-side-fallback-2026-07-01'],
         fallbacks: 'default',
@@ -173,6 +177,14 @@ export class AnthropicAssistantModel implements AssistantModelPort {
       throw new ModelUnavailableError(
         'refusal',
         'el modelo se negó a responder',
+        billed
+      );
+    }
+    // A cut-off answer reads as broken, and a cut-off tool call is incomplete.
+    if (response.stop_reason === 'max_tokens') {
+      throw new ModelUnavailableError(
+        'truncated',
+        'el modelo llegó al tope de salida',
         billed
       );
     }

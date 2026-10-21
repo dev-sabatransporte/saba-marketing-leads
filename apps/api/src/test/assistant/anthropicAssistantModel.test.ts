@@ -7,6 +7,7 @@ const INPUT = {
   instructions: 'Eres el asistente virtual de Saba.',
   turns: [{ role: 'user' as const, content: '¿Dónde queda Catia?' }],
   searches: [],
+  simpleReplies: false,
 };
 
 function message(overrides: Record<string, unknown> = {}): Response {
@@ -94,6 +95,43 @@ describe('AnthropicAssistantModel', () => {
           }),
         }),
       ],
+    });
+  });
+
+  it.each([
+    [true, 300],
+    [false, 1024],
+  ])(
+    'with simple replies %s caps the output at %i tokens',
+    async (simpleReplies, maxTokens) => {
+      const fetchMock = stubFetch(message());
+
+      await new AnthropicAssistantModel(CONFIG).reply({
+        ...INPUT,
+        simpleReplies,
+      });
+
+      const { body } = await sentRequest(fetchMock);
+      expect(body.max_tokens).toBe(maxTokens);
+    }
+  );
+
+  it('fails when the reply hits the output cap, keeping what it billed', async () => {
+    stubFetch(
+      message({
+        stop_reason: 'max_tokens',
+        content: [{ type: 'text', text: 'La sede de Catia abre de lunes' }],
+      })
+    );
+
+    const error = await new AnthropicAssistantModel(CONFIG)
+      .reply(INPUT)
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ModelUnavailableError);
+    expect(error).toMatchObject({
+      reason: 'truncated',
+      billed: { model: 'claude-sonnet-5-5', usage: { outputTokens: 12 } },
     });
   });
 

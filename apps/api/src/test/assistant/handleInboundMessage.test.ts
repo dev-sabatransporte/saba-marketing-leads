@@ -416,6 +416,36 @@ describe('HandleInboundMessageUseCase', () => {
     expect(requestHandoff).toHaveBeenCalledWith('c-1', 'error');
   });
 
+  it.each([true, false])(
+    'never sends a reply cut at the output cap (simple replies %s)',
+    async (simpleReplies) => {
+      const { turn, reply, send, record } = setup({
+        simpleReplies,
+        reply: vi.fn(async (): Promise<ModelReply> => {
+          throw new ModelUnavailableError('truncated', 'tope de salida', {
+            model: 'claude-sonnet-5-5',
+            usage: USAGE,
+          });
+        }),
+      });
+
+      expect(await turn()).toBe('handoff');
+      expect(reply).toHaveBeenCalledWith(
+        expect.objectContaining({ simpleReplies })
+      );
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledWith('c-1', HANDOFF_NOTICE);
+      expect(record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          outcome: 'handoff',
+          reason: 'error',
+          errorDetail: 'truncated: tope de salida',
+          usage: USAGE,
+        })
+      );
+    }
+  );
+
   it('hands over with error on a refusal, keeping the tokens billed', async () => {
     const { turn, send, record } = setup({
       reply: vi.fn(async (): Promise<ModelReply> => {

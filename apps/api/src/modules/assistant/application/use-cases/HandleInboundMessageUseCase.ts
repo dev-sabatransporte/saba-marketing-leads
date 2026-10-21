@@ -149,6 +149,7 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
     const decision = await this.decide(
       buildInstructions(stores, { simpleReplies }),
       turns,
+      simpleReplies,
       toolCalls
     );
     if (decision.kind === 'failed') {
@@ -214,6 +215,7 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
   private async decide(
     instructions: string,
     turns: ModelTurn[],
+    simpleReplies: boolean,
     toolCalls: ToolCall[]
   ): Promise<Decision> {
     const searches: ProductSearch[] = [];
@@ -221,7 +223,12 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
     for (;;) {
       let reply: ModelReply;
       try {
-        reply = await this.model.reply({ instructions, turns, searches });
+        reply = await this.model.reply({
+          instructions,
+          turns,
+          searches,
+          simpleReplies,
+        });
       } catch (error: unknown) {
         const unavailable =
           error instanceof ModelUnavailableError ? error : null;
