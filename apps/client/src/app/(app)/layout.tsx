@@ -1,6 +1,5 @@
 import { cookies } from 'next/headers';
-import { UserMenu } from '@/features/auth/ui/widgets/UserMenu';
-import { AppShell } from '@/shared/ui/layouts/AppShell';
+import { SessionAppShell } from '@/features/auth/ui/layouts/SessionAppShell';
 
 /** Cookie the shadcn sidebar writes when opened or collapsed. */
 const SIDEBAR_COOKIE = 'sidebar_state';
@@ -12,11 +11,8 @@ export default async function AppLayout({
 }>) {
   const sidebarState = (await cookies()).get(SIDEBAR_COOKIE)?.value;
   return (
-    <AppShell
-      defaultOpen={sidebarState !== 'false'}
-      sidebarFooter={<UserMenu />}
-    >
+    <SessionAppShell defaultOpen={sidebarState !== 'false'}>
       {children}
-    </AppShell>
+    </SessionAppShell>
   );
 }

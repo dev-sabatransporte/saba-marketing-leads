@@ -1,7 +1,8 @@
 import { HttpResponse, http } from 'msw';
 import React from 'react';
-import { UserMenu } from '@/features/auth/ui/widgets/UserMenu';
-import { AppShell } from '@/shared/ui/layouts/AppShell';
+import { BACKEND_URL } from '@/__tests__/mocks/backendUrl';
+import { sessionUserFixture } from '@/__tests__/mocks/handlers/session.mock';
+import { SessionAppShell } from '@/features/auth/ui/layouts/SessionAppShell';
 import { server } from '../mocks/server';
 import { render, screen, userEvent, waitFor } from '../test-utils/test-utils';
 
@@ -30,9 +31,9 @@ beforeAll(() => {
 
 function renderShell(): void {
   render(
-    <AppShell defaultOpen sidebarFooter={<UserMenu />}>
+    <SessionAppShell defaultOpen>
       <p>contenido</p>
-    </AppShell>
+    </SessionAppShell>
   );
 }
 
@@ -55,6 +56,37 @@ describe('AppShell', () => {
     expect(chats).toHaveAttribute('href', '/chats');
     expect(chats).toHaveAttribute('data-active', 'true');
     expect(screen.getByText('contenido')).toBeInTheDocument();
+  });
+
+  it('hides the settings without assistant:manage', async () => {
+    renderShell();
+
+    await screen.findByText('Angel Hernández');
+    expect(
+      screen.queryByRole('link', { name: 'Ajustes' })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('Administración')).not.toBeInTheDocument();
+  });
+
+  it('shows the settings to whoever has assistant:manage', async () => {
+    server.use(
+      http.get(`${BACKEND_URL}/v1/me`, () =>
+        HttpResponse.json({
+          success: true,
+          data: {
+            ...sessionUserFixture,
+            permissions: ['marketing:access', 'assistant:manage'],
+          },
+        })
+      )
+    );
+    pathname = '/settings';
+    renderShell();
+
+    const settings = await screen.findByRole('link', { name: 'Ajustes' });
+    expect(settings).toHaveAttribute('href', '/settings');
+    expect(settings).toHaveAttribute('data-active', 'true');
+    expect(screen.getByText('Administración')).toBeInTheDocument();
   });
 
   it('shows who holds the session', async () => {

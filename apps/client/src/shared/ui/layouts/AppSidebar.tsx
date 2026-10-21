@@ -1,5 +1,6 @@
 'use client';
 
+import type { TPermission } from '@repo/schemas';
 import {
   Sidebar,
   SidebarContent,
@@ -17,17 +18,19 @@ import {
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React from 'react';
-import { isNavItemActive, NAVIGATION } from './navigation';
+import { isNavItemActive, navigationFor } from './navigation';
 
 /**
  * The panel's sidebar: logo, navigation and, at the bottom, whatever it gets in
  * `sidebarFooter` (the user menu, which lives in the auth feature: `shared`
- * does not import features).
+ * does not import features). Items needing a permission show only with it.
  */
 export function AppSidebar({
   footer,
+  permissions,
 }: {
   footer?: React.ReactNode;
+  permissions: readonly TPermission[];
 }): React.JSX.Element {
   const pathname = usePathname();
   const { isMobile, setOpenMobile } = useSidebar();
@@ -58,7 +61,7 @@ export function AppSidebar({
       </SidebarHeader>
 
       <SidebarContent>
-        {NAVIGATION.map((group) => (
+        {navigationFor(permissions).map((group) => (
           <SidebarGroup key={group.label}>
             <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
             <SidebarGroupContent>

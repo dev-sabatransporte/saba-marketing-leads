@@ -1,5 +1,6 @@
 'use client';
 
+import type { TPermission } from '@repo/schemas';
 import {
   SidebarInset,
   SidebarProvider,
@@ -15,16 +16,19 @@ import { AppSidebar } from './AppSidebar';
  */
 export function AppShell({
   defaultOpen,
+  permissions,
   sidebarFooter,
   children,
 }: {
   defaultOpen: boolean;
+  /** Of who holds the session, to pick the menu items; none while loading. */
+  permissions: readonly TPermission[];
   sidebarFooter?: React.ReactNode;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
     <SidebarProvider defaultOpen={defaultOpen}>
-      <AppSidebar footer={sidebarFooter} />
+      <AppSidebar footer={sidebarFooter} permissions={permissions} />
       <SidebarInset>
         <header className="flex h-12 shrink-0 items-center border-b px-3">
           <SidebarTrigger aria-label="Mostrar u ocultar el menú" />
