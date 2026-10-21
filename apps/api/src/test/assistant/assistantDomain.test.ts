@@ -184,6 +184,11 @@ describe('mentionsAnAmount', () => {
     'unos 200 dólares',
     'cuesta 1.000 bolívares',
     '50 €',
+    'la inicial es de 300',
+    '12 cuotas de 80',
+    'el precio es 1.200',
+    'financiamiento a 24 meses con 40 al mes',
+    'pagas 80 mensuales',
   ])('catches "%s"', (text) => {
     expect(mentionsAnAmount(text)).toBe(true);
   });
@@ -192,6 +197,8 @@ describe('mentionsAnAmount', () => {
     'Sí, tenemos la Bera SBR 150 en stock.',
     'La sede de Catia abre de 8:00 a. m. a 5:00 p. m.',
     'Manejamos la Empire Keeway 2026',
+    'Tenemos la Bera SBR 150 y la Bera BR 200 en stock.',
+    'La sede de Catia queda en la calle 5, local 12.',
   ])('lets "%s" through', (text) => {
     expect(mentionsAnAmount(text)).toBe(false);
   });

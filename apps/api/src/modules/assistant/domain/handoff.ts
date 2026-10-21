@@ -37,15 +37,21 @@ export function isHandoffNotice(body: string | null): boolean {
   return body === HANDOFF_NOTICE || body === OUT_OF_STOCK_NOTICE;
 }
 
-// A currency sign or name next to an amount. Plain numbers stay allowed:
-// model names ("SBR 150") and hours ("8:00") are full of them.
-const AMOUNT =
+// A currency sign or name, or a number next to a payment word. Plain numbers
+// stay allowed: model names ("SBR 150") and hours ("8:00") are full of them.
+const CURRENCY =
   /\$|€|\bUSD\b|\bBs\.?\s?\d|\d\s?Bs\b|\bd[oó]lar(es)?\b|\bbol[ií]var(es)?\b|\beuros?\b/i;
+const PAYMENT_WORD =
+  '(precios?|inicial(es)?|cuotas?|financiamiento|financiad[oa]s?|mensual(es|idad)?|al mes|pagas?|abonos?)';
+const PAYMENT_AMOUNT = new RegExp(
+  `\\b${PAYMENT_WORD}\\b[^.\\n]{0,30}\\d|\\d[^.\\n]{0,15}\\b${PAYMENT_WORD}\\b`,
+  'i'
+);
 
 /**
  * Saba never gives the assistant an amount, so any amount in a reply is made
  * up. Checked in code too: the instructions alone are not a guarantee.
  */
 export function mentionsAnAmount(text: string): boolean {
-  return AMOUNT.test(text);
+  return CURRENCY.test(text) || PAYMENT_AMOUNT.test(text);
 }
