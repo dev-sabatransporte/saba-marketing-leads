@@ -15,6 +15,8 @@ export interface ChatsApi {
     data: TSendMessage
   ): Promise<Safe<TChatMessage>>;
   markAsRead(conversationId: string): Promise<Safe<null>>;
+  pauseAssistant(conversationId: string): Promise<Safe<null>>;
+  resolve(conversationId: string): Promise<Safe<null>>;
   sendTypingIndicator(conversationId: string): Promise<Safe<null>>;
   getSabaCustomer(conversationId: string): Promise<Safe<TChatSabaCustomers>>;
 }

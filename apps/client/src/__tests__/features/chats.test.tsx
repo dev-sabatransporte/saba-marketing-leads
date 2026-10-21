@@ -214,6 +214,59 @@ describe('ChatsPage', () => {
     ).toBeInTheDocument();
   });
 
+  it('pauses the assistant in the open chat and shows it is paused', async () => {
+    let paused: string | undefined;
+    let pausedNow = false;
+    server.use(
+      http.post(`${base}/:id/assistant/pause`, ({ params }) => {
+        paused = String(params.id);
+        pausedNow = true;
+        return HttpResponse.json({ success: true, data: null });
+      }),
+      http.get(base, () =>
+        HttpResponse.json({
+          success: true,
+          data: conversationsFixture().map((c) => ({
+            ...c,
+            assistantPaused: c.id === 'conv-open' && pausedNow,
+          })),
+        })
+      )
+    );
+    const user = userEvent.setup();
+    render(<ChatsPage />);
+    await user.click(await screen.findByRole('button', { name: /Ana Pérez/ }));
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Pausar asistente' })
+    );
+
+    await waitFor(() => expect(paused).toBe('conv-open'));
+    expect(await screen.findByText('Asistente en pausa')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Pausar asistente' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('marks the chat as resolved', async () => {
+    let resolved: string | undefined;
+    server.use(
+      http.post(`${base}/:id/resolve`, ({ params }) => {
+        resolved = String(params.id);
+        return HttpResponse.json({ success: true, data: null });
+      })
+    );
+    const user = userEvent.setup();
+    render(<ChatsPage />);
+    await user.click(await screen.findByRole('button', { name: /Ana Pérez/ }));
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Marcar como resuelto' })
+    );
+
+    await waitFor(() => expect(resolved).toBe('conv-open'));
+  });
+
   it('sends the reply and clears the composer', async () => {
     let sent: unknown;
     server.use(

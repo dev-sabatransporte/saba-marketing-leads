@@ -16,6 +16,7 @@ import {
   formatPhone,
   windowState,
 } from '../../domain/chat.model';
+import { ConversationActions } from '../components/ConversationActions';
 import { ImageViewer } from '../components/ImageViewer';
 import { InitialsAvatar } from '../components/InitialsAvatar';
 import { MessageBubble } from '../components/MessageBubble';
@@ -89,6 +90,7 @@ export function ConversationThread({
               </span>
             </span>
           </button>
+          <ConversationActions conversation={conversation} />
         </header>
 
         <div className="relative flex min-h-0 flex-1 flex-col">

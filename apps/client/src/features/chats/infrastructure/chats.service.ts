@@ -42,6 +42,14 @@ export class ChatsServiceClass {
     data(await this.chatsApi.markAsRead(conversationId));
   }
 
+  async pauseAssistant(conversationId: string): Promise<void> {
+    data(await this.chatsApi.pauseAssistant(conversationId));
+  }
+
+  async resolve(conversationId: string): Promise<void> {
+    data(await this.chatsApi.resolve(conversationId));
+  }
+
   async sendTypingIndicator(conversationId: string): Promise<void> {
     data(await this.chatsApi.sendTypingIndicator(conversationId));
   }

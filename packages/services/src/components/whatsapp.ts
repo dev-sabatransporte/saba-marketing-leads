@@ -68,6 +68,32 @@ export class WhatsAppService {
     );
   }
 
+  async pauseAssistant(
+    conversationId: string,
+    options?: HttpRequestOptions
+  ): Promise<Safe<null>> {
+    return await this.httpClient.post(
+      `${this.basePath}/${encodeURIComponent(conversationId)}/assistant/pause`,
+      undefined,
+      undefined,
+      options,
+      emptyResponseSchema
+    );
+  }
+
+  async resolve(
+    conversationId: string,
+    options?: HttpRequestOptions
+  ): Promise<Safe<null>> {
+    return await this.httpClient.post(
+      `${this.basePath}/${encodeURIComponent(conversationId)}/resolve`,
+      undefined,
+      undefined,
+      options,
+      emptyResponseSchema
+    );
+  }
+
   async sendTypingIndicator(
     conversationId: string,
     options?: HttpRequestOptions
