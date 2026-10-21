@@ -185,6 +185,35 @@ describe('WhatsApp chats (API)', () => {
     });
   });
 
+  it('puts the chats the assistant handed over first, marked as needing an agent', async () => {
+    const recent = await createChat({
+      waId: '584140000002',
+      lastInboundAt: ONE_HOUR_AGO,
+    });
+    const handedOver = await createChat({
+      waId: '584140000001',
+      lastInboundAt: TWO_DAYS_AGO,
+    });
+    await getTestDb()
+      .update(whatsappConversations)
+      .set({ handoffRequestedAt: ONE_HOUR_AGO, handoffReason: 'pricing' })
+      .where(eq(whatsappConversations.id, handedOver));
+
+    const res = await request(app.getHttpServer()).get(
+      '/whatsapp/conversations'
+    );
+
+    expect(
+      res.body.data.map((c: { id: string; needsAgent: boolean }) => [
+        c.id,
+        c.needsAgent,
+      ])
+    ).toEqual([
+      [handedOver, true],
+      [recent, false],
+    ]);
+  });
+
   it('returns the messages in chronological order and 404 if the conversation does not exist', async () => {
     const id = await createChat({ lastInboundAt: ONE_HOUR_AGO });
     await getTestDb()

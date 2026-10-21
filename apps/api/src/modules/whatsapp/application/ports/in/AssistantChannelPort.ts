@@ -4,6 +4,8 @@ export interface AssistantChat {
   /** `null` with a username-only contact: there is no one to send to. */
   waId: string | null;
   lastInboundAt: Date | null;
+  /** Set while the chat waits for a person: the assistant stays silent. */
+  handoffRequestedAt: Date | null;
   /** The most recent ones, in chronological order. */
   messages: ChatMessage[];
 }
@@ -20,4 +22,6 @@ export interface AssistantChannelPort {
   ): Promise<AssistantChat | null>;
   /** Throws like a panel reply: `WindowClosedException`, `ContactWithoutPhoneException`, Meta errors. */
   sendAsAssistant(conversationId: string, body: string): Promise<ChatMessage>;
+  /** Marks the chat "Necesita asesor", without assigning it to anyone. */
+  requestHandoff(conversationId: string, reason: string): Promise<void>;
 }

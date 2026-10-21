@@ -17,6 +17,7 @@ export interface Conversation {
   unreadCount: number;
   lastMessageAt: Date | null;
   lastMessagePreview: string | null;
+  needsAgent: boolean;
   windowExpiresAt: Date | null;
 }
 

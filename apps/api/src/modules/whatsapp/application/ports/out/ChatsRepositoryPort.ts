@@ -25,6 +25,12 @@ export interface ChatsRepositoryPort {
     detail: string
   ): Promise<void>;
   markAsRead(conversationId: string): Promise<boolean>;
+  /** Marks the chat "Necesita asesor"; no-op if it already is. */
+  requestHandoff(
+    conversationId: string,
+    reason: string,
+    at: Date
+  ): Promise<void>;
   /** `wamid` of the last message the customer sent; `null` if they never wrote. */
   lastInboundWamid(conversationId: string): Promise<string | null>;
   /** `undefined` if the message does not exist; `null` if it exists but has no file. */

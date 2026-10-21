@@ -26,6 +26,8 @@ export const conversationSummarySchema = z.object({
   unreadCount: z.number().int(),
   lastMessageAt: z.string().nullable(),
   lastMessagePreview: z.string().nullable(),
+  /** The assistant handed it to a person and nobody has picked it up yet. */
+  needsAgent: z.boolean(),
   /** Until when free text replies are possible; `null` if the customer never wrote. */
   windowExpiresAt: z.string().nullable(),
 });

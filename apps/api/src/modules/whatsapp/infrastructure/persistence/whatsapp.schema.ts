@@ -60,6 +60,12 @@ export const whatsappConversations = pgTable(
       .default('open'),
     assignedTo: uuid('assigned_to'),
     assignedAt: timestamp('assigned_at', { withTimezone: true }),
+    // Set when the assistant hands the chat to a person ("Necesita asesor"):
+    // the assistant stays silent while it is set.
+    handoffRequestedAt: timestamp('handoff_requested_at', {
+      withTimezone: true,
+    }),
+    handoffReason: text('handoff_reason'),
     lastMessageAt: timestamp('last_message_at', { withTimezone: true }),
     // The 24 h window is computed from here: only live inbound messages move it.
     lastInboundAt: timestamp('last_inbound_at', { withTimezone: true }),

@@ -27,7 +27,8 @@ function channel(): WhatsAppAssistantChannel {
   const clock = { now: () => NOW };
   return new WhatsAppAssistantChannel(
     chats,
-    new ReplyToConversationUseCase(chats, cloud, clock)
+    new ReplyToConversationUseCase(chats, cloud, clock),
+    clock
   );
 }
 
@@ -75,6 +76,7 @@ describe('WhatsAppAssistantChannel (against Postgres)', () => {
     const chat = await channel().read(conversationId, 20);
 
     expect(chat).toMatchObject({
+      handoffRequestedAt: null,
       waId: '584140000001',
       lastInboundAt: TEN_MINUTES_AGO,
       messages: [{ source: 'customer', body: '¿Dónde queda Catia?' }],
@@ -104,6 +106,26 @@ describe('WhatsAppAssistantChannel (against Postgres)', () => {
       source: 'assistant',
       sentBy: null,
       wamid: 'wamid.OUT',
+    });
+  });
+
+  it('marks the chat for an agent once, keeping the first reason', async () => {
+    const conversationId = await createChat(TEN_MINUTES_AGO);
+
+    await channel().requestHandoff(conversationId, 'pricing');
+    await channel().requestHandoff(conversationId, 'error');
+
+    const [row] = await getTestDb()
+      .select()
+      .from(whatsappConversations)
+      .where(eq(whatsappConversations.id, conversationId));
+    expect(row).toMatchObject({
+      handoffRequestedAt: NOW,
+      handoffReason: 'pricing',
+      assignedTo: null,
+    });
+    expect(await channel().read(conversationId, 20)).toMatchObject({
+      handoffRequestedAt: NOW,
     });
   });
 

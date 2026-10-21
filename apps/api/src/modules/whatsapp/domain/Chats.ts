@@ -15,6 +15,8 @@ export interface ConversationSummary {
   lastMessageAt: Date | null;
   lastMessagePreview: string | null;
   lastInboundAt: Date | null;
+  /** When the assistant handed the chat to a person; `null` if it did not. */
+  handoffRequestedAt: Date | null;
 }
 
 export interface ChatMessage {

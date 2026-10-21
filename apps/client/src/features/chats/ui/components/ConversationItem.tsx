@@ -36,6 +36,11 @@ export function ConversationItem({
           <span className="min-w-0 flex-1 truncate font-semibold text-sm">
             {name}
           </span>
+          {conversation.needsAgent && (
+            <span className="shrink-0 rounded-full bg-destructive/10 px-2 py-0.5 font-medium text-destructive text-xs">
+              Necesita asesor
+            </span>
+          )}
           {conversation.contact.linkedToSaba && (
             <Link2
               aria-label="Vinculado a Saba"

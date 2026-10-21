@@ -1,7 +1,10 @@
 import { HttpResponse, http } from 'msw';
 import React from 'react';
 import { BACKEND_URL } from '@/__tests__/mocks/backendUrl';
-import { sabaCustomerFixture } from '@/__tests__/mocks/handlers/chats.mock';
+import {
+  conversationsFixture,
+  sabaCustomerFixture,
+} from '@/__tests__/mocks/handlers/chats.mock';
 import { ChatsPage } from '@/features/chats/ui/pages/ChatsPage';
 import { server } from '../mocks/server';
 import {
@@ -29,6 +32,35 @@ describe('ChatsPage', () => {
     expect(within(list).getByLabelText('2 sin leer')).toBeInTheDocument();
     // Without a WhatsApp name the phone is shown.
     expect(within(list).getByText('+58 424 999 9999')).toBeInTheDocument();
+  });
+
+  it('marks the chats the assistant handed over as needing an agent', async () => {
+    server.use(
+      http.get(base, () =>
+        HttpResponse.json({
+          success: true,
+          // The API already sends them first.
+          data: conversationsFixture()
+            .reverse()
+            .map((c) => ({
+              ...c,
+              needsAgent: c.id === 'conv-closed',
+            })),
+        })
+      )
+    );
+    render(<ChatsPage />);
+
+    const list = await screen.findByRole('navigation', {
+      name: 'Conversaciones',
+    });
+    const [needsAgent, other] = within(list).getAllByRole('button');
+    expect(
+      within(needsAgent as HTMLElement).getByText('Necesita asesor')
+    ).toBeInTheDocument();
+    expect(
+      within(other as HTMLElement).queryByText('Necesita asesor')
+    ).not.toBeInTheDocument();
   });
 
   it('opens the thread, shows the customer image and marks it as read', async () => {

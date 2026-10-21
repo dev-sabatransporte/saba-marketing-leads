@@ -23,6 +23,7 @@ export function toConversationDomain(dto: TConversationSummary): Conversation {
     unreadCount: dto.unreadCount,
     lastMessageAt: date(dto.lastMessageAt),
     lastMessagePreview: dto.lastMessagePreview,
+    needsAgent: dto.needsAgent,
     windowExpiresAt: date(dto.windowExpiresAt),
   };
 }

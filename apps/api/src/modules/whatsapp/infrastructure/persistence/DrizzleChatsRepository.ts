@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import {
   type ApiDb,
   DRIZZLE_CLIENT,
@@ -28,6 +28,7 @@ const conversationColumns = {
   waId: whatsappContacts.waId,
   profileName: whatsappContacts.profileName,
   sabaProfileId: whatsappContacts.sabaProfileId,
+  handoffRequestedAt: whatsappConversations.handoffRequestedAt,
 };
 
 const messageColumns = {
@@ -49,6 +50,7 @@ function toConversation(row: {
   lastMessageAt: Date | null;
   lastMessagePreview: string | null;
   lastInboundAt: Date | null;
+  handoffRequestedAt: Date | null;
   contactId: string;
   waId: string | null;
   profileName: string | null;
@@ -67,6 +69,7 @@ function toConversation(row: {
     lastMessageAt: row.lastMessageAt,
     lastMessagePreview: row.lastMessagePreview,
     lastInboundAt: row.lastInboundAt,
+    handoffRequestedAt: row.handoffRequestedAt,
   };
 }
 
@@ -89,7 +92,11 @@ export class DrizzleChatsRepository implements ChatsRepositoryPort {
         whatsappContacts,
         eq(whatsappContacts.id, whatsappConversations.contactId)
       )
-      .orderBy(sql`${whatsappConversations.lastMessageAt} desc nulls last`)
+      // Chats the assistant handed over go first: someone has to pick them up.
+      .orderBy(
+        sql`${whatsappConversations.handoffRequestedAt} is not null desc`,
+        sql`${whatsappConversations.lastMessageAt} desc nulls last`
+      )
       .limit(limit);
     return rows.map(toConversation);
   }
@@ -200,6 +207,23 @@ export class DrizzleChatsRepository implements ChatsRepositoryPort {
       .orderBy(desc(whatsappMessages.waTimestamp))
       .limit(1);
     return row?.wamid ?? null;
+  }
+
+  /** Keeps the first reason: a later failure does not hide why it was handed over. */
+  async requestHandoff(
+    conversationId: string,
+    reason: string,
+    at: Date
+  ): Promise<void> {
+    await this.db
+      .update(whatsappConversations)
+      .set({ handoffRequestedAt: at, handoffReason: reason, updatedAt: at })
+      .where(
+        and(
+          eq(whatsappConversations.id, conversationId),
+          isNull(whatsappConversations.handoffRequestedAt)
+        )
+      );
   }
 
   async markAsRead(conversationId: string): Promise<boolean> {

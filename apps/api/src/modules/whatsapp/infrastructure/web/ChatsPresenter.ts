@@ -26,6 +26,7 @@ function toConversation(c: ConversationSummary): TConversationSummary {
     unreadCount: c.unreadCount,
     lastMessageAt: c.lastMessageAt?.toISOString() ?? null,
     lastMessagePreview: c.lastMessagePreview,
+    needsAgent: c.handoffRequestedAt !== null,
     windowExpiresAt: windowExpiresAt(c.lastInboundAt)?.toISOString() ?? null,
   };
 }

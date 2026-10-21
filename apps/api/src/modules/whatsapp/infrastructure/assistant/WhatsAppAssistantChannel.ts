@@ -5,6 +5,7 @@ import type {
 } from '../../application/ports/in/AssistantChannelPort';
 import type { ReplyToConversationPort } from '../../application/ports/in/ReplyToConversationPort';
 import type { ChatsRepositoryPort } from '../../application/ports/out/ChatsRepositoryPort';
+import type { ClockPort } from '../../application/ports/out/ClockPort';
 import type { ChatMessage } from '../../domain/Chats';
 import { WHATSAPP_TOKENS } from '../../tokens';
 
@@ -15,7 +16,8 @@ export class WhatsAppAssistantChannel implements AssistantChannelPort {
     @Inject(WHATSAPP_TOKENS.ChatsRepository)
     private readonly chats: ChatsRepositoryPort,
     @Inject(WHATSAPP_TOKENS.ReplyToConversation)
-    private readonly reply: ReplyToConversationPort
+    private readonly reply: ReplyToConversationPort,
+    @Inject(WHATSAPP_TOKENS.Clock) private readonly clock: ClockPort
   ) {}
 
   async read(
@@ -27,11 +29,16 @@ export class WhatsAppAssistantChannel implements AssistantChannelPort {
     return {
       waId: conversation.contact.waId,
       lastInboundAt: conversation.lastInboundAt,
+      handoffRequestedAt: conversation.handoffRequestedAt,
       messages: await this.chats.listMessages(conversationId, historyLimit),
     };
   }
 
   sendAsAssistant(conversationId: string, body: string): Promise<ChatMessage> {
     return this.reply.sendAsAssistant(conversationId, body);
+  }
+
+  requestHandoff(conversationId: string, reason: string): Promise<void> {
+    return this.chats.requestHandoff(conversationId, reason, this.clock.now());
   }
 }
