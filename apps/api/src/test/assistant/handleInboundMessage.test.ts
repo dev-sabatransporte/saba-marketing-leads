@@ -1,15 +1,22 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ModelReply } from '../../modules/assistant/application/ports/out/AssistantModelPort';
+import type {
+  AssistantModelPort,
+  ModelReply,
+} from '../../modules/assistant/application/ports/out/AssistantModelPort';
 import type { ChannelChat } from '../../modules/assistant/application/ports/out/ChatChannelPort';
 import type { StoresSnapshot } from '../../modules/assistant/application/ports/out/StoresSourcePort';
 import { HandleInboundMessageUseCase } from '../../modules/assistant/application/use-cases/HandleInboundMessageUseCase';
-import { ModelUnavailableError } from '../../modules/assistant/domain/AssistantErrors';
+import {
+  CatalogUnavailableError,
+  ModelUnavailableError,
+} from '../../modules/assistant/domain/AssistantErrors';
 import type { NewAssistantRun } from '../../modules/assistant/domain/AssistantRun';
 import { DEFAULT_ASSISTANT_SETTINGS } from '../../modules/assistant/domain/AssistantSettings';
 import {
   HANDOFF_NOTICE,
   handoffNotice,
 } from '../../modules/assistant/domain/handoff';
+import type { Product } from '../../modules/assistant/domain/product';
 
 const NOW = new Date('2026-10-21T15:00:00Z');
 const USAGE = {
@@ -22,6 +29,20 @@ const ANSWER_TEXT = 'Catia queda en la Av. Sucre.';
 const ANSWER: ModelReply = {
   kind: 'answer',
   text: ANSWER_TEXT,
+  model: 'claude-sonnet-5-5',
+  usage: USAGE,
+};
+const BERA: Product = {
+  name: 'Moto Bera SBR 150',
+  model: 'SBR 150',
+  brand: 'Bera',
+  categories: ['Motos'],
+  inStock: true,
+};
+const SEARCH: ModelReply = {
+  kind: 'search_products',
+  callId: 'toolu_1',
+  query: 'bera sbr',
   model: 'claude-sonnet-5-5',
   usage: USAGE,
 };
@@ -55,6 +76,7 @@ function setup({
   chatWhenSending = chat,
   stores = { stores: [], misconfigured: false },
   reply = vi.fn(async (): Promise<ModelReply> => ANSWER),
+  search = vi.fn(async (_query: string): Promise<Product[]> => [BERA]),
   send = vi.fn(async (_id: string, _body: string) => ({ id: 'out-1' })),
   record = vi.fn(async (_run: NewAssistantRun): Promise<void> => undefined),
 }: {
@@ -62,7 +84,10 @@ function setup({
   /** What the chat looks like once the model has answered. */
   chatWhenSending?: ChannelChat;
   stores?: StoresSnapshot;
-  reply?: () => Promise<ModelReply>;
+  reply?: (
+    input: Parameters<AssistantModelPort['reply']>[0]
+  ) => Promise<ModelReply>;
+  search?: (query: string) => Promise<Product[]>;
   send?: (id: string, body: string) => Promise<{ id: string }>;
   record?: (run: NewAssistantRun) => Promise<void>;
 } = {}) {
@@ -75,13 +100,14 @@ function setup({
       requestHandoff,
     },
     { current: async () => stores },
+    { search },
     { reply },
     { record },
     { now: () => NOW }
   );
   const turn = (messageId = 'in-2', type = 'text') =>
     useCase.execute({ conversationId: 'c-1', messageId, type });
-  return { turn, reply, send, record, requestHandoff };
+  return { turn, reply, search, send, record, requestHandoff };
 }
 
 describe('HandleInboundMessageUseCase', () => {
@@ -96,6 +122,96 @@ describe('HandleInboundMessageUseCase', () => {
         inboundMessageIds: ['in-2'],
         sentMessageId: 'out-1',
         outcome: 'answered',
+        usage: USAGE,
+      })
+    );
+  });
+
+  it('searches Saba when the model asks, and answers with the result', async () => {
+    const reply = vi
+      .fn<AssistantModelPort['reply']>()
+      .mockResolvedValueOnce(SEARCH)
+      .mockResolvedValueOnce(ANSWER);
+    const { turn, search, send, record } = setup({ reply });
+
+    expect(await turn()).toBe('answered');
+    expect(search).toHaveBeenCalledWith('bera sbr');
+    expect(reply).toHaveBeenCalledTimes(2);
+    expect(reply.mock.calls[1]?.[0].searches).toEqual([
+      { callId: 'toolu_1', query: 'bera sbr', products: [BERA] },
+    ]);
+    expect(send).toHaveBeenCalledWith('c-1', ANSWER_TEXT);
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outcome: 'answered',
+        toolCalls: [
+          { tool: 'search_products', query: 'bera sbr', resultCount: 1 },
+        ],
+        // Both calls to the model are billed.
+        usage: { ...USAGE, inputTokens: 80, outputTokens: 40 },
+      })
+    );
+  });
+
+  it('hands over with error when Saba does not answer the search', async () => {
+    const reply = vi
+      .fn<AssistantModelPort['reply']>()
+      .mockResolvedValue(SEARCH);
+    const { turn, send, requestHandoff, record } = setup({
+      reply,
+      search: vi.fn(async (): Promise<Product[]> => {
+        throw new CatalogUnavailableError(false, 'Saba respondió 429');
+      }),
+    });
+
+    expect(await turn()).toBe('handoff');
+    expect(reply).toHaveBeenCalledTimes(1);
+    expect(requestHandoff).toHaveBeenCalledWith('c-1', 'error');
+    expect(send).toHaveBeenCalledWith('c-1', HANDOFF_NOTICE);
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outcome: 'handoff',
+        reason: 'error',
+        errorDetail: expect.stringContaining('Saba respondió 429'),
+        toolCalls: [
+          { tool: 'search_products', query: 'bera sbr', resultCount: null },
+        ],
+        usage: USAGE,
+      })
+    );
+  });
+
+  it('hands over with error when the model keeps searching', async () => {
+    const reply = vi
+      .fn<AssistantModelPort['reply']>()
+      .mockResolvedValue(SEARCH);
+    const { turn, search, requestHandoff, record } = setup({ reply });
+
+    expect(await turn()).toBe('handoff');
+    expect(search).toHaveBeenCalledTimes(3);
+    expect(requestHandoff).toHaveBeenCalledWith('c-1', 'error');
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: 'error',
+        toolCalls: expect.arrayContaining([
+          expect.objectContaining({ tool: 'search_products' }),
+        ]),
+      })
+    );
+  });
+
+  it('keeps the tokens of earlier calls when a later one fails', async () => {
+    const reply = vi
+      .fn<AssistantModelPort['reply']>()
+      .mockResolvedValueOnce(SEARCH)
+      .mockRejectedValueOnce(new ModelUnavailableError('api_error', 'caído'));
+    const { turn, record } = setup({ reply });
+
+    expect(await turn()).toBe('handoff');
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: 'error',
+        model: 'claude-sonnet-5-5',
         usage: USAGE,
       })
     );

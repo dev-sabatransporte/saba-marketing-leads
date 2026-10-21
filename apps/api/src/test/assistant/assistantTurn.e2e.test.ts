@@ -19,13 +19,17 @@ import type {
   ModelReply,
 } from '../../modules/assistant/application/ports/out/AssistantModelPort';
 import type { StoresSnapshot } from '../../modules/assistant/application/ports/out/StoresSourcePort';
-import { ModelUnavailableError } from '../../modules/assistant/domain/AssistantErrors';
+import {
+  CatalogUnavailableError,
+  ModelUnavailableError,
+} from '../../modules/assistant/domain/AssistantErrors';
 import {
   HANDOFF_NOTICE,
   type HandoffReason,
   handoffNotice,
 } from '../../modules/assistant/domain/handoff';
 import type { Store } from '../../modules/assistant/domain/instructions';
+import type { Product } from '../../modules/assistant/domain/product';
 import {
   assistantRuns,
   assistantSettings,
@@ -78,6 +82,27 @@ const REPLY: ModelReply = {
 const sendText = vi.fn<(to: string, body: string) => Promise<string>>();
 const reply = vi.fn<AssistantModelPort['reply']>();
 const currentStores = vi.fn<() => Promise<StoresSnapshot>>();
+const searchProducts = vi.fn<(query: string) => Promise<Product[]>>();
+
+const BERA: Product = {
+  name: 'Moto Bera SBR 150',
+  model: 'SBR 150',
+  brand: 'Bera',
+  categories: ['Motos'],
+  inStock: true,
+};
+
+/** The model asks for a search first, then decides with `then`. */
+function searchThen(query: string, then: ModelReply): void {
+  reply
+    .mockResolvedValueOnce({
+      ...REPLY,
+      kind: 'search_products',
+      callId: 'toolu_1',
+      query,
+    })
+    .mockResolvedValueOnce(then);
+}
 
 function customerMessage(
   wamid: string,
@@ -151,6 +176,8 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
       .useValue({ now: () => now })
       .overrideProvider(ASSISTANT_TOKENS.Model)
       .useValue({ reply })
+      .overrideProvider(ASSISTANT_TOKENS.Products)
+      .useValue({ search: searchProducts })
       .overrideProvider(ASSISTANT_TOKENS.Stores)
       .useValue({ current: currentStores })
       .compile();
@@ -172,6 +199,7 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
     let sent = 0;
     sendText.mockReset().mockImplementation(async () => `wamid.OUT${++sent}`);
     reply.mockReset().mockResolvedValue(REPLY);
+    searchProducts.mockReset().mockResolvedValue([BERA]);
     currentStores
       .mockReset()
       .mockResolvedValue({ stores: [CATIA], misconfigured: false });
@@ -512,5 +540,109 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
 
     expect(reply).not.toHaveBeenCalled();
     expect(sendText).not.toHaveBeenCalled();
+  });
+
+  describe('product questions', () => {
+    it('answers with what Saba returned when it is in stock', async () => {
+      await turnOn();
+      const text = 'Sí, tenemos la Moto Bera SBR 150 y hay stock.';
+      searchThen('bera sbr', { ...REPLY, text });
+
+      await receive(textMessage('¿tienen la bera sbr?'));
+      const run = await waitForRun();
+
+      expect(searchProducts).toHaveBeenCalledWith('bera sbr');
+      expect(reply.mock.calls[1]?.[0].searches).toEqual([
+        { callId: 'toolu_1', query: 'bera sbr', products: [BERA] },
+      ]);
+      expect(sendText).toHaveBeenCalledWith('584140000001', text);
+      expect(run).toMatchObject({
+        outcome: 'answered',
+        toolCalls: [
+          { tool: 'search_products', query: 'bera sbr', resultCount: 1 },
+        ],
+        inputTokens: 80,
+      });
+    });
+
+    it('says the model is carried and hands over when it is out of stock', async () => {
+      await turnOn();
+      searchProducts.mockResolvedValue([{ ...BERA, inStock: false }]);
+      searchThen('bera sbr', {
+        ...REPLY,
+        kind: 'handoff',
+        reason: 'out_of_stock',
+      });
+
+      await receive(textMessage('¿tienen la bera sbr?'));
+      const run = await expectHandoff('out_of_stock');
+
+      expect(sendText).toHaveBeenCalledWith(
+        '584140000001',
+        expect.stringContaining('lo manejamos')
+      );
+      expect(run.toolCalls).toEqual([
+        { tool: 'search_products', query: 'bera sbr', resultCount: 1 },
+      ]);
+    });
+
+    it('hands over with data_not_found when the product is not in Saba', async () => {
+      await turnOn();
+      searchProducts.mockResolvedValue([]);
+      searchThen('yamaha r1', {
+        ...REPLY,
+        kind: 'handoff',
+        reason: 'data_not_found',
+      });
+
+      await receive(textMessage('¿tienen la yamaha r1?'));
+      const run = await expectHandoff('data_not_found');
+
+      expect(run.toolCalls).toEqual([
+        { tool: 'search_products', query: 'yamaha r1', resultCount: 0 },
+      ]);
+    });
+
+    it('hands a price question over and never sends an amount', async () => {
+      await turnOn();
+      searchThen('bera sbr', {
+        ...REPLY,
+        text: 'La Bera SBR 150 tiene una inicial de US$ 300.',
+      });
+
+      await receive(textMessage('¿cuánto es la inicial de la bera sbr?'));
+      await expectHandoff('pricing');
+
+      expect(sendText).toHaveBeenCalledTimes(1);
+      expect(sendText).not.toHaveBeenCalledWith(
+        '584140000001',
+        expect.stringContaining('300')
+      );
+    });
+
+    it('hands over with error when Saba is down, without telling the customer why', async () => {
+      await turnOn();
+      searchProducts.mockRejectedValue(
+        new CatalogUnavailableError(false, 'Saba respondió 429')
+      );
+      reply.mockResolvedValueOnce({
+        ...REPLY,
+        kind: 'search_products',
+        callId: 'toolu_1',
+        query: 'bera sbr',
+      });
+
+      await receive(textMessage('¿tienen la bera sbr?'));
+      const run = await expectHandoff('error');
+
+      expect(reply).toHaveBeenCalledTimes(1);
+      expect(sendText).toHaveBeenCalledWith('584140000001', HANDOFF_NOTICE);
+      expect(run).toMatchObject({
+        errorDetail: expect.stringContaining('429'),
+        toolCalls: [
+          { tool: 'search_products', query: 'bera sbr', resultCount: null },
+        ],
+      });
+    });
   });
 });

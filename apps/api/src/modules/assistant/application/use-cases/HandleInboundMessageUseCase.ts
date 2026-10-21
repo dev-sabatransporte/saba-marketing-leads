@@ -1,10 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ModelUnavailableError } from '../../domain/AssistantErrors';
-import type { NewAssistantRun } from '../../domain/AssistantRun';
+import {
+  addUsage,
+  type NewAssistantRun,
+  type TokenUsage,
+  type ToolCall,
+} from '../../domain/AssistantRun';
 import {
   aPersonHasTheChat,
   isForTheAssistant,
   isLatestCustomerMessage,
+  type ModelTurn,
   toModelTurns,
   withinReplyWindow,
 } from '../../domain/conversation';
@@ -22,15 +28,19 @@ import type {
 import type {
   AssistantModelPort,
   ModelReply,
+  ProductSearch,
 } from '../ports/out/AssistantModelPort';
 import type { AssistantRunsRepositoryPort } from '../ports/out/AssistantRunsRepositoryPort';
 import type { AssistantSettingsRepositoryPort } from '../ports/out/AssistantSettingsRepositoryPort';
 import type { ChatChannelPort } from '../ports/out/ChatChannelPort';
 import type { ClockPort } from '../ports/out/ClockPort';
+import type { ProductCatalogPort } from '../ports/out/ProductCatalogPort';
 import type { StoresSourcePort } from '../ports/out/StoresSourcePort';
 
 // Enough context for a short WhatsApp exchange without paying for old chats.
 const HISTORY_LIMIT = 20;
+// A customer asks about one or two models; more searches means the model is lost.
+const MAX_SEARCHES = 3;
 
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -40,6 +50,19 @@ type RunFields = Pick<
   NewAssistantRun,
   'sentMessageId' | 'outcome' | 'reason' | 'errorDetail' | 'model' | 'usage'
 >;
+
+interface Billed {
+  model: string | null;
+  usage: TokenUsage | null;
+}
+
+type Decision =
+  | {
+      kind: 'decided';
+      reply: Exclude<ModelReply, { kind: 'search_products' }>;
+      billed: Billed;
+    }
+  | { kind: 'failed'; errorDetail: string; billed: Billed };
 
 /**
  * One assistant turn: a customer message in, at most one message out, and a
@@ -54,6 +77,8 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
     private readonly settings: AssistantSettingsRepositoryPort,
     @Inject(ASSISTANT_TOKENS.Channel) private readonly channel: ChatChannelPort,
     @Inject(ASSISTANT_TOKENS.Stores) private readonly stores: StoresSourcePort,
+    @Inject(ASSISTANT_TOKENS.Products)
+    private readonly products: ProductCatalogPort,
     @Inject(ASSISTANT_TOKENS.Model) private readonly model: AssistantModelPort,
     @Inject(ASSISTANT_TOKENS.Runs)
     private readonly runs: AssistantRunsRepositoryPort,
@@ -86,12 +111,13 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
     if (!isLatestCustomerMessage(chat.messages, messageId)) return 'ignored';
 
     const startedAt = this.clock.now().getTime();
+    const toolCalls: ToolCall[] = [];
     const run = (fields: RunFields): Promise<void> =>
       this.runs.record({
         conversationId,
         inboundMessageIds: [messageId],
         latencyMs: this.clock.now().getTime() - startedAt,
-        toolCalls: [],
+        toolCalls: [...toolCalls],
         ...fields,
       });
     const handOver = (
@@ -119,22 +145,18 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
       });
     }
 
-    let reply: ModelReply;
-    try {
-      reply = await this.model.reply({
-        instructions: buildInstructions(stores),
-        turns,
-      });
-    } catch (error: unknown) {
-      const unavailable = error instanceof ModelUnavailableError ? error : null;
-      const detail = describe(error);
+    const decision = await this.decide(
+      buildInstructions(stores),
+      turns,
+      toolCalls
+    );
+    if (decision.kind === 'failed') {
       return handOver('error', {
-        errorDetail: unavailable ? `${unavailable.reason}: ${detail}` : detail,
-        model: unavailable?.billed?.model ?? null,
-        usage: unavailable?.billed?.usage ?? null,
+        errorDetail: decision.errorDetail,
+        ...decision.billed,
       });
     }
-    const billed = { model: reply.model, usage: reply.usage };
+    const { reply, billed } = decision;
     // The model takes seconds: a person may have taken the chat meanwhile.
     const latest = await this.channel.read(conversationId, HISTORY_LIMIT);
     if (!latest || aPersonHasTheChat(latest)) {
@@ -178,6 +200,75 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
       ...billed,
     });
     return 'answered';
+  }
+
+  /**
+   * Asks the model until it answers or hands over, running on Saba each
+   * product search it asks for. Every search lands in `toolCalls`, so the
+   * run records it whatever happens next.
+   */
+  private async decide(
+    instructions: string,
+    turns: ModelTurn[],
+    toolCalls: ToolCall[]
+  ): Promise<Decision> {
+    const searches: ProductSearch[] = [];
+    let billed: Billed = { model: null, usage: null };
+    for (;;) {
+      let reply: ModelReply;
+      try {
+        reply = await this.model.reply({ instructions, turns, searches });
+      } catch (error: unknown) {
+        const unavailable =
+          error instanceof ModelUnavailableError ? error : null;
+        const detail = describe(error);
+        return {
+          kind: 'failed',
+          errorDetail: unavailable
+            ? `${unavailable.reason}: ${detail}`
+            : detail,
+          billed: unavailable?.billed
+            ? {
+                model: unavailable.billed.model,
+                usage: addUsage(billed.usage, unavailable.billed.usage),
+              }
+            : billed,
+        };
+      }
+      billed = {
+        model: reply.model,
+        usage: addUsage(billed.usage, reply.usage),
+      };
+      if (reply.kind !== 'search_products') {
+        return { kind: 'decided', reply, billed };
+      }
+      if (searches.length === MAX_SEARCHES) {
+        return {
+          kind: 'failed',
+          errorDetail: `el modelo pidió más de ${MAX_SEARCHES} búsquedas`,
+          billed,
+        };
+      }
+
+      const { callId, query } = reply;
+      try {
+        const products = await this.products.search(query);
+        toolCalls.push({
+          tool: 'search_products',
+          query,
+          resultCount: products.length,
+        });
+        searches.push({ callId, query, products });
+      } catch (error: unknown) {
+        // Saba down, slow, rate-limited or the key rejected: never a guess.
+        toolCalls.push({ tool: 'search_products', query, resultCount: null });
+        return {
+          kind: 'failed',
+          errorDetail: `search_products: ${describe(error)}`,
+          billed,
+        };
+      }
+    }
   }
 
   /**

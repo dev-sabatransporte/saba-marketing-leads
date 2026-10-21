@@ -6,6 +6,7 @@ const CONFIG = { anthropicApiKey: 'sk-test', model: 'claude-sonnet-5-5' };
 const INPUT = {
   instructions: 'Eres el asistente virtual de Saba.',
   turns: [{ role: 'user' as const, content: '¿Dónde queda Catia?' }],
+  searches: [],
 };
 
 function message(overrides: Record<string, unknown> = {}): Response {
@@ -76,8 +77,15 @@ describe('AnthropicAssistantModel', () => {
       messages: [{ role: 'user', content: '¿Dónde queda Catia?' }],
       output_config: { effort: 'low' },
       fallbacks: 'default',
-      tool_choice: { type: 'auto' },
+      tool_choice: { type: 'auto', disable_parallel_tool_use: true },
       tools: [
+        expect.objectContaining({
+          name: 'search_products',
+          strict: true,
+          input_schema: expect.objectContaining({
+            required: ['query'],
+          }),
+        }),
         expect.objectContaining({
           name: 'transfer_to_human',
           strict: true,
@@ -87,6 +95,109 @@ describe('AnthropicAssistantModel', () => {
         }),
       ],
     });
+  });
+
+  it('asks for a product search when the model calls search_products', async () => {
+    stubFetch(
+      message({
+        stop_reason: 'tool_use',
+        content: [
+          { type: 'text', text: 'Déjame revisar' },
+          {
+            type: 'tool_use',
+            id: 'toolu_1',
+            name: 'search_products',
+            input: { query: 'bera sbr' },
+          },
+        ],
+      })
+    );
+
+    expect(
+      await new AnthropicAssistantModel(CONFIG).reply(INPUT)
+    ).toMatchObject({
+      kind: 'search_products',
+      callId: 'toolu_1',
+      query: 'bera sbr',
+      model: 'claude-sonnet-5-5',
+    });
+  });
+
+  it('sends back each search as the tool call and its result', async () => {
+    const fetchMock = stubFetch(message());
+
+    await new AnthropicAssistantModel(CONFIG).reply({
+      ...INPUT,
+      searches: [
+        {
+          callId: 'toolu_1',
+          query: 'bera sbr',
+          products: [
+            {
+              name: 'Moto Bera SBR 150',
+              model: 'SBR 150',
+              brand: 'Bera',
+              categories: ['Motos'],
+              inStock: false,
+            },
+          ],
+        },
+      ],
+    });
+
+    const { body } = await sentRequest(fetchMock);
+    const messages = body.messages as Array<{
+      role: string;
+      content: Array<Record<string, unknown>>;
+    }>;
+    expect(messages).toHaveLength(3);
+    expect(messages[1]).toEqual({
+      role: 'assistant',
+      content: [
+        {
+          type: 'tool_use',
+          id: 'toolu_1',
+          name: 'search_products',
+          input: { query: 'bera sbr' },
+        },
+      ],
+    });
+    expect(messages[2]?.role).toBe('user');
+    expect(messages[2]?.content[0]).toMatchObject({
+      type: 'tool_result',
+      tool_use_id: 'toolu_1',
+    });
+    expect(JSON.parse(String(messages[2]?.content[0]?.content))).toEqual({
+      products: [
+        {
+          name: 'Moto Bera SBR 150',
+          model: 'SBR 150',
+          brand: 'Bera',
+          categories: ['Motos'],
+          in_stock: false,
+        },
+      ],
+    });
+  });
+
+  it('treats a search without text as an unusable reply', async () => {
+    stubFetch(
+      message({
+        stop_reason: 'tool_use',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu_1',
+            name: 'search_products',
+            input: { query: '  ' },
+          },
+        ],
+      })
+    );
+
+    await expect(
+      new AnthropicAssistantModel(CONFIG).reply(INPUT)
+    ).rejects.toMatchObject({ reason: 'invalid_tool_input' });
   });
 
   it('hands over when the model calls transfer_to_human', async () => {

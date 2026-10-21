@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type {
   AssistantModelPort,
   ModelReply,
+  ProductSearch,
 } from '../../application/ports/out/AssistantModelPort';
 import { ModelUnavailableError } from '../../domain/AssistantErrors';
 import type { ModelTurn } from '../../domain/conversation';
@@ -15,10 +16,28 @@ import type { AssistantConfig } from '../assistantConfig';
 const MAX_TOKENS = 1024;
 const TIMEOUT_MS = 30_000;
 
+const SEARCH_PRODUCTS = {
+  name: 'search_products',
+  description:
+    'Busca productos activos de Saba por nombre, modelo o marca (sin importar tildes). Devuelve hasta 10, cada uno con name, model, brand, categories e in_stock. Nunca devuelve precios.',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      query: {
+        type: 'string',
+        description: 'Nombre, modelo o marca, p. ej. "bera sbr 150".',
+      },
+    },
+    required: ['query'],
+    additionalProperties: false,
+  },
+  strict: true,
+};
+
 const TRANSFER_TO_HUMAN = {
   name: 'transfer_to_human',
   description:
-    'Pasa la conversación a un asesor de Saba. Úsala en vez de responder cuando el cliente pide hablar con una persona, pregunta por precios, montos o financiamiento, pregunta algo fuera de sedes y horarios, o cuando el dato no está en tus instrucciones.',
+    'Pasa la conversación a un asesor de Saba. Úsala en vez de responder cuando el cliente pide hablar con una persona, pregunta por precios, montos o financiamiento, pregunta algo fuera de productos, sedes y horarios, cuando un producto no aparece o no tiene stock, o cuando el dato no está en tus instrucciones ni en lo que devolvió search_products.',
   input_schema: {
     type: 'object' as const,
     properties: {
@@ -31,6 +50,44 @@ const TRANSFER_TO_HUMAN = {
 };
 
 const transferInputSchema = z.object({ reason: z.enum(MODEL_HANDOFF_REASONS) });
+const searchInputSchema = z.object({ query: z.string().trim().min(1) });
+
+/** Each search goes back as the model's call followed by Saba's result. */
+function toSearchMessages(
+  searches: ProductSearch[]
+): Anthropic.Beta.BetaMessageParam[] {
+  return searches.flatMap(({ callId, query, products }) => [
+    {
+      role: 'assistant' as const,
+      content: [
+        {
+          type: 'tool_use' as const,
+          id: callId,
+          name: SEARCH_PRODUCTS.name,
+          input: { query },
+        },
+      ],
+    },
+    {
+      role: 'user' as const,
+      content: [
+        {
+          type: 'tool_result' as const,
+          tool_use_id: callId,
+          content: JSON.stringify({
+            products: products.map((p) => ({
+              name: p.name,
+              model: p.model,
+              brand: p.brand,
+              categories: p.categories,
+              in_stock: p.inStock,
+            })),
+          }),
+        },
+      ],
+    },
+  ]);
+}
 
 @Injectable()
 export class AnthropicAssistantModel implements AssistantModelPort {
@@ -54,9 +111,11 @@ export class AnthropicAssistantModel implements AssistantModelPort {
   async reply({
     instructions,
     turns,
+    searches,
   }: {
     instructions: string;
     turns: ModelTurn[];
+    searches: ProductSearch[];
   }): Promise<ModelReply> {
     if (!this.client) {
       throw new ModelUnavailableError(
@@ -81,10 +140,14 @@ export class AnthropicAssistantModel implements AssistantModelPort {
             cache_control: { type: 'ephemeral' },
           },
         ],
-        tools: [TRANSFER_TO_HUMAN],
+        tools: [SEARCH_PRODUCTS, TRANSFER_TO_HUMAN],
         // Forcing a tool is a 400 on this model family: the model decides.
-        tool_choice: { type: 'auto' },
-        messages: turns.map((t) => ({ role: t.role, content: t.content })),
+        // One call at a time keeps each search paired with its result.
+        tool_choice: { type: 'auto', disable_parallel_tool_use: true },
+        messages: [
+          ...turns.map((t) => ({ role: t.role, content: t.content })),
+          ...toSearchMessages(searches),
+        ],
         output_config: { effort: 'low' },
       });
     } catch (error: unknown) {
@@ -128,6 +191,27 @@ export class AnthropicAssistantModel implements AssistantModelPort {
         );
       }
       return { kind: 'handoff', reason: input.data.reason, ...billed };
+    }
+
+    const search = response.content.find(
+      (block) =>
+        block.type === 'tool_use' && block.name === SEARCH_PRODUCTS.name
+    );
+    if (search?.type === 'tool_use') {
+      const input = searchInputSchema.safeParse(search.input);
+      if (!input.success) {
+        throw new ModelUnavailableError(
+          'invalid_tool_input',
+          'search_products sin texto a buscar',
+          billed
+        );
+      }
+      return {
+        kind: 'search_products',
+        callId: search.id,
+        query: input.data.query,
+        ...billed,
+      };
     }
 
     const text = response.content

@@ -7,6 +7,20 @@ export interface TokenUsage {
   cacheWriteTokens: number;
 }
 
+/** Each call to the model is billed: a turn with a search makes two or more. */
+export function addUsage(
+  total: TokenUsage | null,
+  usage: TokenUsage
+): TokenUsage {
+  if (!total) return usage;
+  return {
+    inputTokens: total.inputTokens + usage.inputTokens,
+    outputTokens: total.outputTokens + usage.outputTokens,
+    cacheReadTokens: total.cacheReadTokens + usage.cacheReadTokens,
+    cacheWriteTokens: total.cacheWriteTokens + usage.cacheWriteTokens,
+  };
+}
+
 /** A tool the model used in a turn; `resultCount` is `null` if Saba did not answer. */
 export interface ToolCall {
   tool: 'search_products';

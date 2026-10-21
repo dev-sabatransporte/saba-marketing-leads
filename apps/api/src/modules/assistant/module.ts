@@ -6,6 +6,7 @@ import { HandleInboundMessageUseCase } from './application/use-cases/HandleInbou
 import { loadAssistantConfig } from './infrastructure/assistantConfig';
 import { AssistantInboundHandler } from './infrastructure/bus/AssistantInboundHandler';
 import { AnthropicAssistantModel } from './infrastructure/external/AnthropicAssistantModel';
+import { HttpSabaAssistantProducts } from './infrastructure/external/HttpSabaAssistantProducts';
 import { HttpSabaAssistantStores } from './infrastructure/external/HttpSabaAssistantStores';
 import { SystemClock } from './infrastructure/external/SystemClock';
 import { DrizzleAssistantRunsRepository } from './infrastructure/persistence/DrizzleAssistantRunsRepository';
@@ -23,6 +24,10 @@ import { ASSISTANT_TOKENS } from './tokens';
     { provide: ASSISTANT_TOKENS.Logger, useExisting: StructuredLogger },
     { provide: ASSISTANT_TOKENS.Model, useClass: AnthropicAssistantModel },
     { provide: ASSISTANT_TOKENS.Stores, useClass: HttpSabaAssistantStores },
+    {
+      provide: ASSISTANT_TOKENS.Products,
+      useClass: HttpSabaAssistantProducts,
+    },
     {
       provide: ASSISTANT_TOKENS.Channel,
       useExisting: WHATSAPP_TOKENS.AssistantChannel,

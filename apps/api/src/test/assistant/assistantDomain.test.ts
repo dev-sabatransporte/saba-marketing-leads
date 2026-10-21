@@ -58,6 +58,27 @@ describe('buildInstructions', () => {
     expect(text).toContain('customer_requested');
   });
 
+  it('tells the model to search products and to answer only with what comes back', () => {
+    const text = buildInstructions(null);
+    expect(text).toContain('search_products');
+    expect(text).toContain('in_stock');
+    expect(text).toContain('out_of_stock');
+    expect(text).toMatch(/nunca[^\n]*de memoria/i);
+  });
+
+  it('hands over every question about price, down payment, instalments or credit', () => {
+    const text = buildInstructions(null);
+    for (const word of [
+      'precio',
+      'inicial',
+      'cuotas',
+      'financiamiento',
+      'crédito',
+    ]) {
+      expect(text).toContain(word);
+    }
+  });
+
   it('tells the model to decide by the latest message and to answer greetings', () => {
     const text = buildInstructions(null);
     expect(text).toContain('último mensaje del cliente');
