@@ -1,3 +1,5 @@
+import type { TPermission } from '@repo/schemas';
+
 export type StaffRole = 'admin' | 'cajero' | 'vendedor';
 
 export interface SessionUser {
@@ -5,6 +7,8 @@ export interface SessionUser {
   email: string;
   name: string;
   role: StaffRole;
+  /** Only to render: the API enforces them on every request. */
+  permissions: TPermission[];
 }
 
 const ROLE_LABEL: Record<StaffRole, string> = {
