@@ -1,8 +1,8 @@
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AssistantChannel } from '../../modules/whatsapp/application/use-cases/AssistantChannel';
 import { ReplyToConversationUseCase } from '../../modules/whatsapp/application/use-cases/ReplyToConversationUseCase';
 import { WindowClosedException } from '../../modules/whatsapp/domain/exceptions/whatsappExceptions';
+import { WhatsAppAssistantChannel } from '../../modules/whatsapp/infrastructure/assistant/WhatsAppAssistantChannel';
 import { DrizzleChatsRepository } from '../../modules/whatsapp/infrastructure/persistence/DrizzleChatsRepository';
 import {
   whatsappContacts,
@@ -17,7 +17,7 @@ const TWO_DAYS_AGO = new Date(NOW.getTime() - 48 * 60 * 60 * 1000);
 
 const sendText = vi.fn<(to: string, body: string) => Promise<string>>();
 
-function channel(): AssistantChannel {
+function channel(): WhatsAppAssistantChannel {
   const chats = new DrizzleChatsRepository(getTestDb());
   const cloud = {
     sendText,
@@ -25,7 +25,7 @@ function channel(): AssistantChannel {
     sendTypingIndicator: vi.fn(),
   };
   const clock = { now: () => NOW };
-  return new AssistantChannel(
+  return new WhatsAppAssistantChannel(
     chats,
     new ReplyToConversationUseCase(chats, cloud, clock)
   );
@@ -59,7 +59,7 @@ async function createChat(lastInboundAt: Date): Promise<string> {
   return conversation.id;
 }
 
-describe('AssistantChannel (against Postgres)', () => {
+describe('WhatsAppAssistantChannel (against Postgres)', () => {
   afterAll(async () => {
     await closeTestDb();
   });

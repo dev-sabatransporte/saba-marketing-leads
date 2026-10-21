@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { SabaCustomersModule } from '../sabaCustomers/module';
 import { SABA_CUSTOMERS_TOKENS } from '../sabaCustomers/tokens';
-import { AssistantChannel } from './application/use-cases/AssistantChannel';
 import { GetMediaUseCase } from './application/use-cases/GetMediaUseCase';
 import { GetSabaCustomerUseCase } from './application/use-cases/GetSabaCustomerUseCase';
 import { ListConversationsUseCase } from './application/use-cases/ListConversationsUseCase';
@@ -13,6 +12,7 @@ import { ReplyToConversationUseCase } from './application/use-cases/ReplyToConve
 import { ReprocessPendingUseCase } from './application/use-cases/ReprocessPendingUseCase';
 import { SendTypingIndicatorUseCase } from './application/use-cases/SendTypingIndicatorUseCase';
 import { VerifyWebhookSubscriptionUseCase } from './application/use-cases/VerifyWebhookSubscriptionUseCase';
+import { WhatsAppAssistantChannel } from './infrastructure/assistant/WhatsAppAssistantChannel';
 import { CqrsInboundMessagePublisher } from './infrastructure/bus/CqrsInboundMessagePublisher';
 import { CqrsWebhookEventPublisher } from './infrastructure/bus/CqrsWebhookEventPublisher';
 import { ProcessWebhookEventHandler } from './infrastructure/bus/ProcessWebhookEventHandler';
@@ -122,10 +122,9 @@ import { WHATSAPP_TOKENS } from './tokens';
       useExisting: SendTypingIndicatorUseCase,
     },
     WebhookReprocessorService,
-    AssistantChannel,
     {
       provide: WHATSAPP_TOKENS.AssistantChannel,
-      useExisting: AssistantChannel,
+      useClass: WhatsAppAssistantChannel,
     },
   ],
   // The only port other modules get: the assistant reads and writes chats through it.

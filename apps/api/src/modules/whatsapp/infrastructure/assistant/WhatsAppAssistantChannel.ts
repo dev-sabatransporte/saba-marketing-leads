@@ -1,19 +1,21 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { ChatMessage } from '../../domain/Chats';
-import { WHATSAPP_TOKENS } from '../../tokens';
 import type {
   AssistantChannelPort,
   AssistantChat,
-} from '../ports/in/AssistantChannelPort';
-import type { ChatsRepositoryPort } from '../ports/out/ChatsRepositoryPort';
-import { ReplyToConversationUseCase } from './ReplyToConversationUseCase';
+} from '../../application/ports/in/AssistantChannelPort';
+import type { ReplyToConversationPort } from '../../application/ports/in/ReplyToConversationPort';
+import type { ChatsRepositoryPort } from '../../application/ports/out/ChatsRepositoryPort';
+import type { ChatMessage } from '../../domain/Chats';
+import { WHATSAPP_TOKENS } from '../../tokens';
 
+/** The port `whatsapp` exports to the `assistant` module. */
 @Injectable()
-export class AssistantChannel implements AssistantChannelPort {
+export class WhatsAppAssistantChannel implements AssistantChannelPort {
   constructor(
     @Inject(WHATSAPP_TOKENS.ChatsRepository)
     private readonly chats: ChatsRepositoryPort,
-    private readonly reply: ReplyToConversationUseCase
+    @Inject(WHATSAPP_TOKENS.ReplyToConversation)
+    private readonly reply: ReplyToConversationPort
   ) {}
 
   async read(

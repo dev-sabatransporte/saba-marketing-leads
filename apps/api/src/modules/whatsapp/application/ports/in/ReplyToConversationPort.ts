@@ -6,4 +6,6 @@ export interface ReplyToConversationPort {
     body: string;
     sentBy: string;
   }): Promise<ChatMessage>;
+  /** Same rules, without a person behind it: source `assistant`, `sent_by` NULL. */
+  sendAsAssistant(conversationId: string, body: string): Promise<ChatMessage>;
 }
