@@ -6,6 +6,7 @@ import {
   ReprocessPendingUseCase,
 } from '../../modules/whatsapp/application/use-cases/ReprocessPendingUseCase';
 import { extractChanges } from '../../modules/whatsapp/domain/WebhookChange';
+import type { StoredInboundMessage } from '../../modules/whatsapp/domain/events/InboundMessageStored';
 import { DrizzleInboxUnitOfWork } from '../../modules/whatsapp/infrastructure/persistence/DrizzleInboxUnitOfWork';
 import { DrizzleWebhookEventRepository } from '../../modules/whatsapp/infrastructure/persistence/DrizzleWebhookEventRepository';
 import {
@@ -19,8 +20,13 @@ import { closeTestDb, getTestDb, resetDatabase } from '../support/testDatabase';
 
 const db = () => getTestDb();
 const events = () => new DrizzleWebhookEventRepository(db());
+let announced: StoredInboundMessage[] = [];
 const process = () =>
-  new ProcessWebhookEventUseCase(new DrizzleInboxUnitOfWork(db()), events());
+  new ProcessWebhookEventUseCase(new DrizzleInboxUnitOfWork(db()), events(), {
+    publishStored: (messages) => {
+      announced.push(...messages);
+    },
+  });
 
 async function saveEvent(field: string, payload: unknown): Promise<string> {
   const [id] = await events().save([{ field, payload }]);
@@ -62,6 +68,7 @@ describe('ProcesarWebhookEventoUseCase (contra Postgres)', () => {
 
   beforeEach(async () => {
     await resetDatabase();
+    announced = [];
   });
 
   it('creates contact, conversation and message from the real webhook, and marks the event', async () => {
@@ -111,6 +118,30 @@ describe('ProcesarWebhookEventoUseCase (contra Postgres)', () => {
     expect(await db().select().from(whatsappMessages)).toHaveLength(1);
     const [conversation] = await db().select().from(whatsappConversations);
     expect(conversation?.unreadCount).toBe(1);
+  });
+
+  it('announces each new inbound message once, after it is saved', async () => {
+    const eventId = await saveFixture();
+    await process().execute(eventId);
+
+    const message = await db().query.whatsappMessages.findFirst();
+    expect(announced).toEqual([
+      {
+        conversationId: message?.conversationId,
+        messageId: message?.id,
+        type: 'text',
+      },
+    ]);
+
+    // Meta resends the same wamid: nothing new to announce.
+    await process().execute(await saveFixture());
+    expect(announced).toHaveLength(1);
+  });
+
+  it('announces nothing if the event fails', async () => {
+    const eventId = await saveEvent('messages', { messages: 'no es una lista' });
+    expect(await process().execute(eventId)).toBe('failed');
+    expect(announced).toEqual([]);
   });
 
   it('recognizes the same customer when later only their user_id arrives', async () => {

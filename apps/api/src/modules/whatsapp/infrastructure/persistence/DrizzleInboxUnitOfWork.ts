@@ -114,8 +114,8 @@ class DrizzleInboxScope implements InboxTxScope {
   async insertInboundMessage(
     conversationId: string,
     message: InboundMessage
-  ): Promise<boolean> {
-    const inserted = await this.tx
+  ): Promise<string | null> {
+    const [inserted] = await this.tx
       .insert(whatsappMessages)
       .values({
         conversationId,
@@ -129,7 +129,7 @@ class DrizzleInboxScope implements InboxTxScope {
       })
       .onConflictDoNothing({ target: whatsappMessages.wamid })
       .returning({ id: whatsappMessages.id });
-    return inserted.length > 0;
+    return inserted?.id ?? null;
   }
 
   async registerInbound(

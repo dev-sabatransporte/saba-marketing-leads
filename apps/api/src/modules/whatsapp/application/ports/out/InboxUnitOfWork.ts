@@ -22,11 +22,11 @@ export interface InboxTxScope {
     profileName: string | null
   ): Promise<string>;
   ensureConversation(contactId: string): Promise<string>;
-  /** `false` if the `wamid` already existed (Meta resends webhooks). */
+  /** The new message id; `null` if the `wamid` already existed (Meta resends webhooks). */
   insertInboundMessage(
     conversationId: string,
     message: InboundMessage
-  ): Promise<boolean>;
+  ): Promise<string | null>;
   registerInbound(
     conversationId: string,
     message: InboundMessage

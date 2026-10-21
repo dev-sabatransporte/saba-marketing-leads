@@ -12,6 +12,7 @@ import { ReplyToConversationUseCase } from './application/use-cases/ReplyToConve
 import { ReprocessPendingUseCase } from './application/use-cases/ReprocessPendingUseCase';
 import { SendTypingIndicatorUseCase } from './application/use-cases/SendTypingIndicatorUseCase';
 import { VerifyWebhookSubscriptionUseCase } from './application/use-cases/VerifyWebhookSubscriptionUseCase';
+import { CqrsInboundMessagePublisher } from './infrastructure/bus/CqrsInboundMessagePublisher';
 import { CqrsWebhookEventPublisher } from './infrastructure/bus/CqrsWebhookEventPublisher';
 import { ProcessWebhookEventHandler } from './infrastructure/bus/ProcessWebhookEventHandler';
 import { WebhookReprocessorService } from './infrastructure/bus/WebhookReprocessorService';
@@ -47,6 +48,10 @@ import { WHATSAPP_TOKENS } from './tokens';
     {
       provide: WHATSAPP_TOKENS.WebhookEventPublisher,
       useClass: CqrsWebhookEventPublisher,
+    },
+    {
+      provide: WHATSAPP_TOKENS.InboundMessagePublisher,
+      useClass: CqrsInboundMessagePublisher,
     },
     VerifyWebhookSubscriptionUseCase,
     {

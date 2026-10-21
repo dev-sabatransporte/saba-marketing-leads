@@ -4,6 +4,7 @@ export const WHATSAPP_TOKENS = {
   WebhookSignatureVerifier: Symbol('WebhookSignatureVerifierPort'),
   WebhookEventRepository: Symbol('WebhookEventRepositoryPort'),
   WebhookEventPublisher: Symbol('WebhookEventPublisherPort'),
+  InboundMessagePublisher: Symbol('InboundMessagePublisherPort'),
   VerifyWebhookSubscription: Symbol('VerifyWebhookSubscriptionPort'),
   ReceiveWebhook: Symbol('ReceiveWebhookPort'),
   InboxUnitOfWork: Symbol('InboxUnitOfWork'),
