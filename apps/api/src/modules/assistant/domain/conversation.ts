@@ -1,3 +1,5 @@
+import { HANDOFF_NOTICE } from './handoff';
+
 const WINDOW_MS = 24 * 60 * 60 * 1000;
 
 // A 👍 on a reply or a WhatsApp notice is not something to answer or hand over.
@@ -28,11 +30,16 @@ export interface ModelTurn {
  * takes the chat the assistant goes silent anyway), and so is anything that is
  * not text, nor a reply that never reached the customer. The API needs
  * alternating roles starting with the customer, so
- * consecutive lines are joined. Empty when the customer has nothing pending.
+ * consecutive lines are joined. It starts after the last handoff notice:
+ * what came before was for a person, and reading it would make the model
+ * hand the chat over again. Empty when the customer has nothing pending.
  */
 export function toModelTurns(lines: ChatLine[]): ModelTurn[] {
+  const lastHandoff = lines.findLastIndex(
+    (l) => l.source === 'assistant' && l.body === HANDOFF_NOTICE
+  );
   const turns: ModelTurn[] = [];
-  for (const { source, type, body, status } of lines) {
+  for (const { source, type, body, status } of lines.slice(lastHandoff + 1)) {
     if (type !== 'text' || !body?.trim() || status === 'failed') continue;
     const role =
       source === 'customer'

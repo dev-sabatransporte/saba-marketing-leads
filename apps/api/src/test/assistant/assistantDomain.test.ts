@@ -5,6 +5,7 @@ import {
   toModelTurns,
   withinReplyWindow,
 } from '../../modules/assistant/domain/conversation';
+import { HANDOFF_NOTICE } from '../../modules/assistant/domain/handoff';
 import { buildInstructions } from '../../modules/assistant/domain/instructions';
 
 let nextId = 0;
@@ -51,6 +52,12 @@ describe('buildInstructions', () => {
     expect(text).toContain('data_not_found');
     expect(text).toContain('pricing');
     expect(text).toContain('customer_requested');
+  });
+
+  it('tells the model to decide by the latest message and to answer greetings', () => {
+    const text = buildInstructions(null);
+    expect(text).toContain('último mensaje del cliente');
+    expect(text).toMatch(/saludo/i);
   });
 
   it('is the same text for the same stores, so the prompt cache hits', () => {
@@ -104,6 +111,20 @@ describe('toModelTurns with replies that did not go out', () => {
         line('customer', '¿siguen ahí?'),
       ])
     ).toEqual([{ role: 'user', content: 'hola\n¿siguen ahí?' }]);
+  });
+});
+
+describe('toModelTurns after a handoff', () => {
+  it('starts fresh after the last handoff notice: what came before was for a person', () => {
+    expect(
+      toModelTurns([
+        line('customer', 'hola'),
+        line('assistant', 'Hola, ¿en qué te ayudo?'),
+        line('customer', 'Asesor'),
+        line('assistant', HANDOFF_NOTICE),
+        line('customer', 'Hola'),
+      ])
+    ).toEqual([{ role: 'user', content: 'Hola' }]);
   });
 });
 
