@@ -1,0 +1,1 @@
+ALTER TABLE "assistant_settings" DROP COLUMN IF EXISTS "changes";

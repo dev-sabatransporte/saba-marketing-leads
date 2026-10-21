@@ -12,6 +12,14 @@ import {
 } from 'drizzle-orm/pg-core';
 import type { ToolCall } from '../../domain/AssistantRun';
 
+/** Who changed each setting and when, as stored: a Saba profile and an ISO date. */
+export type StoredSettingChanges = Partial<
+  Record<
+    string,
+    { changedBy: { id: string; name: string }; changedAt: string }
+  >
+>;
+
 /**
  * A single row (`id = 1`): the assistant's switch and limits. Read on every
  * turn, so a change applies without restarting. Starts off.
@@ -28,6 +36,12 @@ export const assistantSettings = pgTable(
     maxWaitSeconds: integer('max_wait_seconds').notNull().default(30),
     dailyReplyLimit: integer('daily_reply_limit').notNull().default(300),
     simpleReplies: boolean('simple_replies').notNull().default(true),
+    // Per setting, the last change. Saba's name is kept: its profiles cannot be
+    // read from here to resolve the id later.
+    changes: jsonb('changes')
+      .$type<StoredSettingChanges>()
+      .notNull()
+      .default({}),
     // A Saba `profiles` id, without FK: the table belongs to another system.
     updatedBy: uuid('updated_by'),
     updatedAt: timestamp('updated_at', { withTimezone: true })
