@@ -8,7 +8,8 @@ Todo módulo nuevo se registra acá antes o en el mismo PR que su implementació
 | `health` | — | — |
 | `leads` | `leads` | — |
 | `auth` | Ninguna. **No lee tablas de Saba:** login, sesiones y permisos se piden al servidor de Saba por HTTP | `AuthGuard` y `PermissionsGuard` globales (`APP_GUARD`), `@CurrentUser()` |
-| `whatsapp` | `whatsapp_contacts`, `whatsapp_conversations`, `whatsapp_messages`, `whatsapp_webhook_events`, `whatsapp_accounts` | — |
+| `whatsapp` | `whatsapp_contacts`, `whatsapp_conversations`, `whatsapp_messages`, `whatsapp_webhook_events`, `whatsapp_accounts` | `WHATSAPP_TOKENS.AssistantChannel` (`AssistantChannelPort`); evento `InboundMessageStored` |
+| `assistant` | `assistant_settings`, `assistant_runs` | — |
 | `sabaCustomers` | Ninguna. **No lee tablas de Saba:** le pregunta al servidor de Saba por HTTP | `SABA_CUSTOMERS_TOKENS.Reader` (`SabaCustomersReaderPort`) |
 
 ## `whatsapp`
@@ -34,3 +35,10 @@ Todo módulo nuevo se registra acá antes o en el mismo PR que su implementació
 - Cliente HTTP del servidor Node de Saba (`SABA_API_URL`): `GET /api/marketing/customers/by-phone?phone=` devuelve hasta 5 perfiles con identidad y últimas solicitudes, el más probable primero. La normalización de teléfonos y qué es "información importante" viven en Saba (`services/marketing/customerLookup.js`), no acá.
 - Va con la service key y el token de sesión del agente: Saba vuelve a validar la sesión y `has_marketing_access`. 401 → `SABA_CUSTOMERS_SESSION_NOT_RECOGNIZED` (424), 403 → `SABA_CUSTOMERS_FORBIDDEN` (403); caída, timeout, service key rechazada o respuesta inesperada → `SABA_CUSTOMERS_UNAVAILABLE` (424).
 - Lo usa `whatsapp` al **abrir un chat** (`GET /whatsapp/conversations/:id/saba-customer`). Ya no hay vínculo automático al recibir mensajes; `whatsapp_contacts.saba_profile_id` queda para un vínculo manual futuro.
+
+## `assistant`
+
+- Asistente de WhatsApp v1 (spec: issue #18). Responde solo con datos que Saba le da por sus endpoints propios `/api/assistant/*` (`HttpSabaAssistantStores`, header `X-Saba-Assistant-Key` con `SABA_ASSISTANT_KEY` = `ASSISTANT_SERVICE_KEY` de Saba; nunca la llave de marketing). Timeout 5 s, caché de 5 min y última copia buena si Saba falla.
+- Escucha `InboundMessageStored` (lo publica `whatsapp` después del commit) y corre un turno: lee `assistant_settings` (apagado = no hace nada), lee el chat por `AssistantChannelPort`, arma las instrucciones con las sedes (no son herramienta) y llama a Claude (`AnthropicAssistantModel`, `@anthropic-ai/sdk`, `ASSISTANT_MODEL` por defecto `claude-sonnet-5-5`, llave propia `ASSISTANT_ANTHROPIC_API_KEY`, effort bajo, instrucciones cacheadas). Envía un solo mensaje por turno, con `source = 'assistant'` y `sent_by` NULL.
+- Cada turno deja una fila en `assistant_runs` (mensajes atendidos y enviado, resultado, modelo, tokens, latencia). Sin configuración, la API arranca igual y el turno queda como `error`.
+- No toca las tablas de `whatsapp`: todo pasa por `WHATSAPP_TOKENS.AssistantChannel`, que aplica las mismas reglas que una respuesta del panel (ventana de 24 h, teléfono).
