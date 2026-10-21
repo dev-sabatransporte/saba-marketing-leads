@@ -20,6 +20,7 @@ import {
   mentionsAnAmount,
 } from '../../domain/handoff';
 import { buildInstructions } from '../../domain/instructions';
+import { withMapLinks } from '../../domain/mapLinks';
 import { ASSISTANT_TOKENS } from '../../tokens';
 import type {
   HandleInboundMessagePort,
@@ -182,7 +183,10 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
     let sentMessageId: string;
     try {
       sentMessageId = (
-        await this.channel.sendAsAssistant(conversationId, reply.text)
+        await this.channel.sendAsAssistant(
+          conversationId,
+          withMapLinks(reply.text, stores)
+        )
       ).id;
     } catch (error: unknown) {
       return handOver('error', {

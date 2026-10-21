@@ -67,6 +67,8 @@ const CATIA: Store = {
 
 const ANSWER_TEXT =
   'Hola, soy el asistente virtual de Saba. Catia queda en la Av. Sucre.';
+// Catia is named, so code appends its map link: the model never writes it.
+const SENT_TEXT = `${ANSWER_TEXT}\n\n📍 Catia: https://maps.app.goo.gl/x`;
 const REPLY: ModelReply = {
   kind: 'answer',
   text: ANSWER_TEXT,
@@ -205,7 +207,7 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
       .mockResolvedValue({ stores: [CATIA], misconfigured: false });
   });
 
-  it('answers with the stores in the instructions and records the turn', async () => {
+  it('answers with the stores in the instructions, adds the map link of the store it names and records the turn', async () => {
     await turnOn();
 
     await receive(textMessage('¿Dónde queda la tienda de Catia?'));
@@ -220,14 +222,14 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
     ]);
 
     expect(sendText).toHaveBeenCalledTimes(1);
-    expect(sendText).toHaveBeenCalledWith('584140000001', ANSWER_TEXT);
+    expect(sendText).toHaveBeenCalledWith('584140000001', SENT_TEXT);
 
     const sent = await getTestDb()
       .select()
       .from(whatsappMessages)
       .where(eq(whatsappMessages.source, 'assistant'));
     expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({ body: ANSWER_TEXT, sentBy: null });
+    expect(sent[0]).toMatchObject({ body: SENT_TEXT, sentBy: null });
 
     const [inbound] = await getTestDb()
       .select()
@@ -502,7 +504,7 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
 
     await vi.waitFor(() => expect(reply).toHaveBeenCalledTimes(1));
     await vi.waitFor(() =>
-      expect(sendText).toHaveBeenCalledWith('584140000001', ANSWER_TEXT)
+      expect(sendText).toHaveBeenCalledWith('584140000001', SENT_TEXT)
     );
   });
 
