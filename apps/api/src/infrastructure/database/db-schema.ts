@@ -13,5 +13,6 @@
  * `relations()` and every `pgEnum` is re-exported here in the same PR**.
  */
 
+export * from '../../modules/assistant/infrastructure/persistence/assistant.schema';
 export * from '../../modules/leads/infrastructure/persistence/leads.schema';
 export * from '../../modules/whatsapp/infrastructure/persistence/whatsapp.schema';
