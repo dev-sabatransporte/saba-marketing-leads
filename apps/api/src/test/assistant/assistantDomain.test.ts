@@ -25,7 +25,7 @@ const line = (
 ): ChatLine => ({ id: `m${++nextId}`, source, type, body, status });
 
 describe('buildInstructions', () => {
-  it('lists every store with its address, map and hours', () => {
+  it('lists every store with its address and hours, never its map link', () => {
     const text = buildInstructions([
       {
         name: 'Catia',
@@ -38,8 +38,15 @@ describe('buildInstructions', () => {
     expect(text).toContain('asistente virtual de Saba');
     expect(text).toContain('Catia');
     expect(text).toContain('Av. Sucre');
-    expect(text).toContain('https://maps.app.goo.gl/x');
     expect(text).toContain('Lunes a viernes 8:00 a. m. a 5:00 p. m.');
+    expect(text).not.toContain('https://maps.app.goo.gl/x');
+    expect(text).not.toContain('Mapa:');
+  });
+
+  it('tells the model to always name the store, so code can add its map link', () => {
+    expect(buildInstructions(null)).toContain(
+      'Menciona siempre la sede por su nombre'
+    );
   });
 
   it('says plainly when a store has no hours, so the model does not invent them', () => {

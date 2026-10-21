@@ -217,6 +217,7 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
     expect(input?.instructions).toContain('asistente virtual de Saba');
     expect(input?.instructions).toContain('Catia');
     expect(input?.instructions).toContain('Av. Sucre');
+    expect(input?.instructions).not.toContain('https://maps.app.goo.gl/x');
     expect(input?.turns).toEqual([
       { role: 'user', content: '¿Dónde queda la tienda de Catia?' },
     ]);
