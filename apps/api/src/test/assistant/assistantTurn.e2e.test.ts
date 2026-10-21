@@ -474,6 +474,28 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
     });
   });
 
+  it('stays silent if a person wrote in the resolved chat before the customer came back', async () => {
+    const id = await chatStarted();
+    await app
+      .get<ConversationActionsPort>(WHATSAPP_TOKENS.ConversationActions)
+      .resolve(id);
+    now = new Date((CUSTOMER_SENT_AT + 200) * 1000);
+    await app
+      .get<ReplyToConversationPort>(WHATSAPP_TOKENS.ReplyToConversation)
+      .execute({
+        conversationId: id,
+        body: '¿Pudiste resolver lo de ayer?',
+        sentBy: '11111111-1111-1111-1111-111111111111',
+      });
+    sendText.mockClear();
+
+    await receive(textMessage('sí, gracias', 'wamid.C', 300));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(reply).not.toHaveBeenCalled();
+    expect(sendText).not.toHaveBeenCalled();
+  });
+
   it('does not answer outside the 24 h window', async () => {
     await turnOn();
     now = new Date((CUSTOMER_SENT_AT + 25 * 60 * 60) * 1000);

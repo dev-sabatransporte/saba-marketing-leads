@@ -49,12 +49,15 @@ const CHAT: ChannelChat = {
 
 function setup({
   chat = CHAT,
+  chatWhenSending = chat,
   stores = { stores: [], misconfigured: false },
   reply = vi.fn(async (): Promise<ModelReply> => ANSWER),
   send = vi.fn(async (_id: string, _body: string) => ({ id: 'out-1' })),
   record = vi.fn(async (_run: NewAssistantRun): Promise<void> => undefined),
 }: {
   chat?: ChannelChat;
+  /** What the chat looks like once the model has answered. */
+  chatWhenSending?: ChannelChat;
   stores?: StoresSnapshot;
   reply?: () => Promise<ModelReply>;
   send?: (id: string, body: string) => Promise<{ id: string }>;
@@ -63,7 +66,11 @@ function setup({
   const requestHandoff = vi.fn(async (): Promise<void> => undefined);
   const useCase = new HandleInboundMessageUseCase(
     { get: async () => ({ ...DEFAULT_ASSISTANT_SETTINGS, enabled: true }) },
-    { read: async () => chat, sendAsAssistant: send, requestHandoff },
+    {
+      read: vi.fn(async () => chatWhenSending).mockResolvedValueOnce(chat),
+      sendAsAssistant: send,
+      requestHandoff,
+    },
     { current: async () => stores },
     { reply },
     { record },
@@ -134,6 +141,24 @@ describe('HandleInboundMessageUseCase', () => {
 
     expect(await turn('in-2', 'image')).toBe('ignored');
     expect(requestHandoff).not.toHaveBeenCalled();
+  });
+
+  it('does not send if a person took the chat while the model was answering', async () => {
+    const { turn, send, requestHandoff, record } = setup({
+      chatWhenSending: { ...CHAT, personReplied: true },
+    });
+
+    expect(await turn()).toBe('ignored');
+    expect(send).not.toHaveBeenCalled();
+    expect(requestHandoff).not.toHaveBeenCalled();
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outcome: 'error',
+        reason: 'person_took_over',
+        sentMessageId: null,
+        usage: USAGE,
+      })
+    );
   });
 
   it('hands over with the reason the model chose, with a fixed notice', async () => {

@@ -130,6 +130,18 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
       });
     }
     const billed = { model: reply.model, usage: reply.usage };
+    // The model takes seconds: a person may have taken the chat meanwhile.
+    const latest = await this.channel.read(conversationId, HISTORY_LIMIT);
+    if (!latest || aPersonHasTheChat(latest)) {
+      await run({
+        sentMessageId: null,
+        outcome: 'error',
+        reason: 'person_took_over',
+        errorDetail: 'una persona tomó el chat mientras el modelo respondía',
+        ...billed,
+      });
+      return 'ignored';
+    }
     if (reply.kind === 'handoff') {
       return handOver(reply.reason, { errorDetail: null, ...billed });
     }
