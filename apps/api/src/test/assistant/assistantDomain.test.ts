@@ -10,7 +10,11 @@ import {
   handoffNotice,
   mentionsAnAmount,
 } from '../../modules/assistant/domain/handoff';
-import { buildInstructions } from '../../modules/assistant/domain/instructions';
+import {
+  buildInstructions,
+  type Store,
+} from '../../modules/assistant/domain/instructions';
+import { withMapLinks } from '../../modules/assistant/domain/mapLinks';
 
 let nextId = 0;
 const line = (
@@ -232,5 +236,80 @@ describe('withinReplyWindow', () => {
       false
     );
     expect(withinReplyWindow(null, now)).toBe(false);
+  });
+});
+
+describe('withMapLinks', () => {
+  const store = (name: string, mapUrl: string | null): Store => ({
+    name,
+    address: null,
+    mapUrl,
+    publicHours: null,
+  });
+  const CATIA = store('Catia', 'https://maps.app.goo.gl/catia');
+  const PETARE = store('Petare', 'https://maps.app.goo.gl/petare');
+  const LOS_TEQUES = store('Los Teques', 'https://maps.app.goo.gl/teques');
+  const MARACAY = store('Maracay', 'https://maps.app.goo.gl/maracay');
+  const IGLESIA = store('Iglesia', null);
+
+  it('adds the map line of the store the reply names', () => {
+    expect(
+      withMapLinks('La sede de Catia abre de 8:00 a 5:00.', [CATIA, PETARE])
+    ).toBe(
+      'La sede de Catia abre de 8:00 a 5:00.\n\n📍 Catia: https://maps.app.goo.gl/catia'
+    );
+  });
+
+  it('finds the name without minding accents or case', () => {
+    const merida = store('Mérida', 'https://maps.app.goo.gl/merida');
+
+    expect(withMapLinks('En MERIDA abrimos a las 8.', [merida])).toContain(
+      '📍 Mérida: https://maps.app.goo.gl/merida'
+    );
+    expect(withMapLinks('en catía abrimos a las 8.', [CATIA])).toContain(
+      '📍 Catia: https://maps.app.goo.gl/catia'
+    );
+  });
+
+  it('matches whole names only', () => {
+    expect(withMapLinks('Catiana no es una sede.', [CATIA])).toBe(
+      'Catiana no es una sede.'
+    );
+  });
+
+  it('leaves the reply alone when it names no store', () => {
+    expect(withMapLinks('Sí, tenemos la Bera SBR 150.', [CATIA])).toBe(
+      'Sí, tenemos la Bera SBR 150.'
+    );
+    expect(withMapLinks('Catia queda en la Av. Sucre.', null)).toBe(
+      'Catia queda en la Av. Sucre.'
+    );
+  });
+
+  it('adds one line per store named, once each', () => {
+    expect(
+      withMapLinks('Catia y Los Teques abren a las 8; Catia cierra a las 5.', [
+        CATIA,
+        PETARE,
+        LOS_TEQUES,
+      ])
+    ).toBe(
+      'Catia y Los Teques abren a las 8; Catia cierra a las 5.\n\n' +
+        '📍 Catia: https://maps.app.goo.gl/catia\n' +
+        '📍 Los Teques: https://maps.app.goo.gl/teques'
+    );
+  });
+
+  it('adds none when the reply names more than 3 stores', () => {
+    const text = 'Tenemos sedes en Catia, Petare, Los Teques y Maracay.';
+    expect(withMapLinks(text, [CATIA, PETARE, LOS_TEQUES, MARACAY])).toBe(text);
+  });
+
+  it('adds no line for a store without a map', () => {
+    expect(
+      withMapLinks('Iglesia y Catia abren a las 8.', [IGLESIA, CATIA])
+    ).toBe(
+      'Iglesia y Catia abren a las 8.\n\n📍 Catia: https://maps.app.goo.gl/catia'
+    );
   });
 });
