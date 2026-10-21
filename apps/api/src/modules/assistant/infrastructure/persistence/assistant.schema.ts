@@ -27,6 +27,7 @@ export const assistantSettings = pgTable(
     debounceSeconds: integer('debounce_seconds').notNull().default(8),
     maxWaitSeconds: integer('max_wait_seconds').notNull().default(30),
     dailyReplyLimit: integer('daily_reply_limit').notNull().default(300),
+    simpleReplies: boolean('simple_replies').notNull().default(true),
     // A Saba `profiles` id, without FK: the table belongs to another system.
     updatedBy: uuid('updated_by'),
     updatedAt: timestamp('updated_at', { withTimezone: true })

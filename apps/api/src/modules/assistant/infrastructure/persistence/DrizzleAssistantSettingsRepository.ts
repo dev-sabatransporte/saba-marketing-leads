@@ -23,6 +23,7 @@ export class DrizzleAssistantSettingsRepository
         debounceSeconds: true,
         maxWaitSeconds: true,
         dailyReplyLimit: true,
+        simpleReplies: true,
       },
     });
     return row ?? DEFAULT_ASSISTANT_SETTINGS;

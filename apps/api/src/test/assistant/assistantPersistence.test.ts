@@ -33,6 +33,17 @@ describe('assistant persistence (against Postgres)', () => {
     });
   });
 
+  it('starts with simple replies on, and reads them switched off', async () => {
+    const settings = new DrizzleAssistantSettingsRepository(getTestDb());
+    expect(DEFAULT_ASSISTANT_SETTINGS.simpleReplies).toBe(true);
+
+    await getTestDb().insert(assistantSettings).values({});
+    expect((await settings.get()).simpleReplies).toBe(true);
+
+    await getTestDb().update(assistantSettings).set({ simpleReplies: false });
+    expect((await settings.get()).simpleReplies).toBe(false);
+  });
+
   it('allows a single settings row', async () => {
     await getTestDb().insert(assistantSettings).values({});
     await expect(

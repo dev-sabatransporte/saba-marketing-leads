@@ -1,0 +1,1 @@
+ALTER TABLE "assistant_settings" ADD COLUMN "simple_replies" boolean DEFAULT true NOT NULL;
