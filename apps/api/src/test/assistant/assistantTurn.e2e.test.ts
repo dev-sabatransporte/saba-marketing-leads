@@ -28,7 +28,9 @@ import {
 } from '../../modules/assistant/infrastructure/persistence/assistant.schema';
 import { AssistantModule } from '../../modules/assistant/module';
 import { ASSISTANT_TOKENS } from '../../modules/assistant/tokens';
+import type { ConversationActionsPort } from '../../modules/whatsapp/application/ports/in/ConversationActionsPort';
 import type { ProcessWebhookEventPort } from '../../modules/whatsapp/application/ports/in/ProcessWebhookEventPort';
+import type { ReplyToConversationPort } from '../../modules/whatsapp/application/ports/in/ReplyToConversationPort';
 import type { WebhookEventRepositoryPort } from '../../modules/whatsapp/application/ports/out/WebhookEventRepositoryPort';
 import {
   whatsappConversations,
@@ -91,8 +93,12 @@ function customerMessage(
   };
 }
 
-const textMessage = (body: string, wamid = 'wamid.IN1') =>
-  customerMessage(wamid, { type: 'text', text: { body } });
+const textMessage = (body: string, wamid = 'wamid.IN1', secondsLater = 0) =>
+  customerMessage(wamid, {
+    type: 'text',
+    text: { body },
+    timestamp: String(CUSTOMER_SENT_AT + secondsLater),
+  });
 
 describe('assistant turn (webhook → model → WhatsApp)', () => {
   let app: INestApplication;
@@ -159,7 +165,8 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
   beforeEach(async () => {
     await resetDatabase();
     now = new Date((CUSTOMER_SENT_AT + 60) * 1000);
-    sendText.mockReset().mockResolvedValue('wamid.OUT1');
+    let sent = 0;
+    sendText.mockReset().mockImplementation(async () => `wamid.OUT${++sent}`);
     reply.mockReset().mockResolvedValue(REPLY);
     currentStores
       .mockReset()
@@ -371,6 +378,100 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
 
     await expectHandoff('non_text');
     expect(reply).not.toHaveBeenCalled();
+  });
+
+  /** First exchange answered by the assistant; returns the conversation id. */
+  async function chatStarted(): Promise<string> {
+    await turnOn();
+    await receive(textMessage('hola', 'wamid.A'));
+    await waitForRun();
+    reply.mockClear();
+    sendText.mockClear();
+    return (await conversation()).id;
+  }
+
+  async function customerWritesAgainAndNobodyAnswers(): Promise<void> {
+    await receive(textMessage('¿siguen ahí?', 'wamid.B', 120));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(reply).not.toHaveBeenCalled();
+    expect(sendText).not.toHaveBeenCalled();
+  }
+
+  it('stays silent once the chat is assigned to someone', async () => {
+    const id = await chatStarted();
+    await getTestDb()
+      .update(whatsappConversations)
+      .set({ assignedTo: '11111111-1111-1111-1111-111111111111' })
+      .where(eq(whatsappConversations.id, id));
+
+    await customerWritesAgainAndNobodyAnswers();
+  });
+
+  it('stays silent once a person answers from the panel', async () => {
+    const id = await chatStarted();
+    await app
+      .get<ReplyToConversationPort>(WHATSAPP_TOKENS.ReplyToConversation)
+      .execute({
+        conversationId: id,
+        body: 'Hola, te atiende Ana',
+        sentBy: '11111111-1111-1111-1111-111111111111',
+      });
+    sendText.mockClear();
+
+    await customerWritesAgainAndNobodyAnswers();
+  });
+
+  it('stays silent once a person answers from the phone', async () => {
+    const id = await chatStarted();
+    await getTestDb().insert(whatsappMessages).values({
+      conversationId: id,
+      wamid: 'wamid.PHONE',
+      direction: 'outbound',
+      source: 'phone',
+      type: 'text',
+      body: 'te escribo desde el celular',
+      waTimestamp: now,
+    });
+
+    await customerWritesAgainAndNobodyAnswers();
+  });
+
+  it('stays silent once someone pauses it in the chat', async () => {
+    const id = await chatStarted();
+    await app
+      .get<ConversationActionsPort>(WHATSAPP_TOKENS.ConversationActions)
+      .pauseAssistant(id, '11111111-1111-1111-1111-111111111111');
+
+    await customerWritesAgainAndNobodyAnswers();
+  });
+
+  it('answers again after the chat is resolved and the customer writes back', async () => {
+    const id = await chatStarted();
+    const actions = app.get<ConversationActionsPort>(
+      WHATSAPP_TOKENS.ConversationActions
+    );
+    await app
+      .get<ReplyToConversationPort>(WHATSAPP_TOKENS.ReplyToConversation)
+      .execute({
+        conversationId: id,
+        body: 'Listo, ya te atendí',
+        sentBy: '11111111-1111-1111-1111-111111111111',
+      });
+    await actions.pauseAssistant(id, '11111111-1111-1111-1111-111111111111');
+    await actions.resolve(id);
+    sendText.mockClear();
+    now = new Date((CUSTOMER_SENT_AT + 600) * 1000);
+
+    await receive(textMessage('otra pregunta', 'wamid.C', 300));
+
+    await vi.waitFor(() => expect(reply).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(sendText).toHaveBeenCalledWith('584140000001', ANSWER_TEXT)
+    );
+    expect(await conversation()).toMatchObject({
+      status: 'open',
+      assistantPausedAt: null,
+    });
   });
 
   it('does not answer outside the 24 h window', async () => {

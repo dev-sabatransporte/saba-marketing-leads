@@ -26,6 +26,9 @@ const CHAT: ChannelChat = {
   waId: '584140000001',
   lastInboundAt: new Date(NOW.getTime() - 60_000),
   handoffRequestedAt: null,
+  assigned: false,
+  personReplied: false,
+  assistantPaused: false,
   messages: [
     {
       id: 'in-1',
@@ -104,6 +107,33 @@ describe('HandleInboundMessageUseCase', () => {
     expect(await turn()).toBe('ignored');
     expect(reply).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['assigned to someone', { assigned: true }],
+    [
+      'answered by a person from the panel or the phone',
+      { personReplied: true },
+    ],
+    ['paused', { assistantPaused: true }],
+  ] as const)('stays silent while the chat is %s', async (_case, attention) => {
+    const { turn, reply, send, requestHandoff } = setup({
+      chat: { ...CHAT, ...attention },
+    });
+
+    expect(await turn()).toBe('ignored');
+    expect(reply).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+    expect(requestHandoff).not.toHaveBeenCalled();
+  });
+
+  it('stays silent with a person on it even for an image', async () => {
+    const { turn, requestHandoff } = setup({
+      chat: { ...CHAT, personReplied: true },
+    });
+
+    expect(await turn('in-2', 'image')).toBe('ignored');
+    expect(requestHandoff).not.toHaveBeenCalled();
   });
 
   it('hands over with the reason the model chose, with a fixed notice', async () => {

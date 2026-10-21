@@ -57,6 +57,25 @@ export function toModelTurns(lines: ChatLine[]): ModelTurn[] {
 }
 
 /**
+ * The assistant never talks over the team: it stays silent while a person has
+ * the chat (assigned, answered from the panel or the phone, paused) or while
+ * it waits for one after a handoff. All of it clears when the chat is resolved.
+ */
+export function aPersonHasTheChat(chat: {
+  assigned: boolean;
+  personReplied: boolean;
+  assistantPaused: boolean;
+  handoffRequestedAt: Date | null;
+}): boolean {
+  return (
+    chat.assigned ||
+    chat.personReplied ||
+    chat.assistantPaused ||
+    chat.handoffRequestedAt !== null
+  );
+}
+
+/**
  * Whether `messageId` is still the customer's last message. When several
  * arrive together each one starts a turn; only the turn of the newest answers,
  * and it sees all of them.

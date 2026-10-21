@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ModelUnavailableError } from '../../domain/AssistantErrors';
 import type { NewAssistantRun } from '../../domain/AssistantRun';
 import {
+  aPersonHasTheChat,
   isForTheAssistant,
   isLatestCustomerMessage,
   toModelTurns,
@@ -72,7 +73,7 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
     const chat = await this.channel.read(conversationId, HISTORY_LIMIT);
     if (
       !chat?.waId ||
-      chat.handoffRequestedAt ||
+      aPersonHasTheChat(chat) ||
       !withinReplyWindow(chat.lastInboundAt, this.clock.now())
     ) {
       return 'ignored';
