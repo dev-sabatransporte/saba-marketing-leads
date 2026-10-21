@@ -41,7 +41,7 @@ export type TConversationsResponse = z.infer<
 export const chatMessageSchema = z.object({
   id: z.string(),
   direction: z.enum(['inbound', 'outbound']),
-  source: z.enum(['customer', 'system', 'phone', 'history']),
+  source: z.enum(['customer', 'system', 'phone', 'history', 'assistant']),
   type: z.string(),
   body: z.string().nullable(),
   status: z.enum(messageStatuses).nullable(),

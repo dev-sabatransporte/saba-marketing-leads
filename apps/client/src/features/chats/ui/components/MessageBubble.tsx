@@ -21,6 +21,7 @@ const STATUSES: Record<MessageStatus, { label: string; Icon: typeof Check }> = {
 const SOURCES: Partial<Record<Message['source'], string>> = {
   phone: 'Desde el celular',
   history: 'Historial',
+  assistant: '🤖 Asistente',
 };
 
 export function MessageBubble({

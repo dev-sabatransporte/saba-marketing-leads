@@ -95,8 +95,9 @@ export const whatsappMessages = pgTable(
     // NULL while the send is pending: Meta assigns the wamid when it accepts it.
     wamid: text('wamid').unique(),
     direction: text('direction', { enum: ['inbound', 'outbound'] }).notNull(),
+    // `assistant`: written by the WhatsApp assistant (module `assistant`), `sent_by` NULL.
     source: text('source', {
-      enum: ['customer', 'system', 'phone', 'history'],
+      enum: ['customer', 'system', 'phone', 'history', 'assistant'],
     }).notNull(),
     // Meta type (text, image, audio, template, …): open because Meta keeps adding types.
     type: text('type').notNull(),
@@ -124,7 +125,7 @@ export const whatsappMessages = pgTable(
     ),
     check(
       'whatsapp_messages_source_check',
-      sql`${table.source} IN ('customer', 'system', 'phone', 'history')`
+      sql`${table.source} IN ('customer', 'system', 'phone', 'history', 'assistant')`
     ),
     check(
       'whatsapp_messages_status_check',

@@ -20,7 +20,7 @@ export interface ConversationSummary {
 export interface ChatMessage {
   id: string;
   direction: 'inbound' | 'outbound';
-  source: 'customer' | 'system' | 'phone' | 'history';
+  source: 'customer' | 'system' | 'phone' | 'history' | 'assistant';
   type: string;
   body: string | null;
   status: MessageStatus | null;

@@ -150,6 +150,38 @@ describe('ChatsPage', () => {
     );
   });
 
+  it('labels the messages the assistant sent', async () => {
+    server.use(
+      http.get(`${base}/:id/messages`, () =>
+        HttpResponse.json({
+          success: true,
+          data: [
+            {
+              id: 'a1',
+              direction: 'outbound',
+              source: 'assistant',
+              type: 'text',
+              body: 'Hola, soy el asistente virtual de Saba',
+              status: 'delivered',
+              errorDetail: null,
+              hasMedia: false,
+              waTimestamp: '2026-10-07T15:00:00.000Z',
+            },
+          ],
+        })
+      )
+    );
+    const user = userEvent.setup();
+    render(<ChatsPage />);
+    await user.click(await screen.findByRole('button', { name: /Ana Pérez/ }));
+
+    const thread = await screen.findByRole('list', { name: 'Mensajes' });
+    expect(within(thread).getByText('🤖 Asistente')).toBeInTheDocument();
+    expect(
+      within(thread).getByText('Hola, soy el asistente virtual de Saba')
+    ).toBeInTheDocument();
+  });
+
   it('sends the reply and clears the composer', async () => {
     let sent: unknown;
     server.use(

@@ -1,0 +1,2 @@
+ALTER TABLE "whatsapp_messages" DROP CONSTRAINT "whatsapp_messages_source_check";--> statement-breakpoint
+ALTER TABLE "whatsapp_messages" ADD CONSTRAINT "whatsapp_messages_source_check" CHECK ("whatsapp_messages"."source" IN ('customer', 'system', 'phone', 'history', 'assistant'));
