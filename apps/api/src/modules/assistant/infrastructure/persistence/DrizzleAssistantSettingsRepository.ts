@@ -85,6 +85,11 @@ export class DrizzleAssistantSettingsRepository
     const newChanges: StoredSettingChanges = Object.fromEntries(
       changed.map((key) => [key, stored])
     );
+    // Only the changed columns: two managers saving at once each keep theirs,
+    // and each value matches the author recorded for it.
+    const changedValues: Partial<AssistantSettings> = Object.fromEntries(
+      changed.map((key) => [key, settings[key]])
+    );
     // The row may not exist yet (it starts from the defaults): an upsert. The
     // changes are merged with `||` so the other settings keep their author.
     const [row] = await this.db
@@ -98,7 +103,7 @@ export class DrizzleAssistantSettingsRepository
       .onConflictDoUpdate({
         target: assistantSettings.id,
         set: {
-          ...settings,
+          ...changedValues,
           changes: sql`${assistantSettings.changes} || excluded.changes`,
           updatedBy: change.changedBy.id,
           updatedAt: change.changedAt,

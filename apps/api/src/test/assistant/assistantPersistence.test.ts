@@ -44,6 +44,33 @@ describe('assistant persistence (against Postgres)', () => {
     expect((await settings.get()).simpleReplies).toBe(false);
   });
 
+  it('two saves from the same read each keep only what they changed', async () => {
+    const settings = new DrizzleAssistantSettingsRepository(getTestDb());
+    const stale = DEFAULT_ASSISTANT_SETTINGS;
+    const at = new Date('2026-10-21T15:00:00Z');
+
+    await settings.save({ ...stale, enabled: true }, ['enabled'], {
+      changedBy: { id: '22222222-2222-2222-2222-222222222222', name: 'Ana' },
+      changedAt: at,
+    });
+    await settings.save(
+      { ...stale, dailyReplyLimit: 150 },
+      ['dailyReplyLimit'],
+      {
+        changedBy: { id: '33333333-3333-3333-3333-333333333333', name: 'Luis' },
+        changedAt: at,
+      }
+    );
+
+    const saved = await settings.getWithChanges();
+    expect(saved.settings).toMatchObject({
+      enabled: true,
+      dailyReplyLimit: 150,
+    });
+    expect(saved.changes.enabled?.changedBy.name).toBe('Ana');
+    expect(saved.changes.dailyReplyLimit?.changedBy.name).toBe('Luis');
+  });
+
   it('allows a single settings row', async () => {
     await getTestDb().insert(assistantSettings).values({});
     await expect(
