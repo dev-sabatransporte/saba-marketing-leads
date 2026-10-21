@@ -306,6 +306,35 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
     expect(reply).toHaveBeenCalledTimes(1);
   });
 
+  it.each([true, false])(
+    'answers a turn with simple replies %s read from the settings',
+    async (simpleReplies) => {
+      await getTestDb()
+        .insert(assistantSettings)
+        .values({ enabled: true, simpleReplies });
+
+      await receive(textMessage('¿Dónde queda la tienda de Catia?'));
+      const run = await waitForRun();
+
+      const [input] = reply.mock.calls[0] ?? [];
+      expect(input?.simpleReplies).toBe(simpleReplies);
+      expect(input?.instructions.includes('en 1 o 2 frases')).toBe(
+        simpleReplies
+      );
+      expect(sendText).toHaveBeenCalledWith('584140000001', SENT_TEXT);
+      expect(run).toMatchObject({ outcome: 'answered' });
+    }
+  );
+
+  it('starts with simple replies on', async () => {
+    await turnOn();
+
+    await receive(textMessage('hola'));
+    await waitForRun();
+
+    expect(reply.mock.calls[0]?.[0].simpleReplies).toBe(true);
+  });
+
   it('answers without store data when Saba never answered, with the instructions saying so', async () => {
     await turnOn();
     currentStores.mockResolvedValue({ stores: null, misconfigured: false });
@@ -392,6 +421,26 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
     await receive(textMessage('hola'));
 
     await expectHandoff('error');
+  });
+
+  it('hands over with error instead of sending a reply cut at the output cap', async () => {
+    await turnOn();
+    reply.mockRejectedValue(
+      new ModelUnavailableError(
+        'truncated',
+        'el modelo llegó al tope de salida',
+        { model: REPLY.model, usage: REPLY.usage }
+      )
+    );
+
+    await receive(textMessage('¿Qué sedes tienen?'));
+
+    const run = await expectHandoff('error');
+    expect(run.errorDetail).toBe(
+      'truncated: el modelo llegó al tope de salida'
+    );
+    expect(run.outputTokens).toBe(20);
+    expect(sendText).toHaveBeenCalledTimes(1);
   });
 
   it('hands over with error when Saba rejects the assistant key', async () => {
