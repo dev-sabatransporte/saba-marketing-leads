@@ -214,13 +214,14 @@ describe('ChatsPage', () => {
     ).toBeInTheDocument();
   });
 
-  it('pauses the assistant in the open chat and shows it is paused', async () => {
-    let paused: string | undefined;
-    let pausedNow = false;
+  it('turns the assistant off and on in the open chat', async () => {
+    const sent: unknown[] = [];
+    let enabled = true;
     server.use(
-      http.post(`${base}/:id/assistant/pause`, ({ params }) => {
-        paused = String(params.id);
-        pausedNow = true;
+      http.put(`${base}/:id/assistant`, async ({ request }) => {
+        const body = (await request.json()) as { enabled: boolean };
+        sent.push(body);
+        enabled = body.enabled;
         return HttpResponse.json({ success: true, data: null });
       }),
       http.get(base, () =>
@@ -228,7 +229,7 @@ describe('ChatsPage', () => {
           success: true,
           data: conversationsFixture().map((c) => ({
             ...c,
-            assistantPaused: c.id === 'conv-open' && pausedNow,
+            assistantEnabled: c.id === 'conv-open' ? enabled : true,
           })),
         })
       )
@@ -237,34 +238,36 @@ describe('ChatsPage', () => {
     render(<ChatsPage />);
     await user.click(await screen.findByRole('button', { name: /Ana Pérez/ }));
 
-    await user.click(
-      await screen.findByRole('button', { name: 'Pausar asistente' })
-    );
+    const toggle = await screen.findByRole('switch', { name: /Asistente/ });
+    expect(toggle).toBeChecked();
 
-    await waitFor(() => expect(paused).toBe('conv-open'));
-    expect(await screen.findByText('Asistente en pausa')).toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: 'Pausar asistente' })
-    ).not.toBeInTheDocument();
+    await user.click(toggle);
+    await waitFor(() => expect(toggle).not.toBeChecked());
+    await user.click(toggle);
+    await waitFor(() => expect(toggle).toBeChecked());
+
+    expect(sent).toEqual([{ enabled: false }, { enabled: true }]);
   });
 
-  it('marks the chat as resolved', async () => {
-    let resolved: string | undefined;
+  it('shows the assistant off in a chat a person took over', async () => {
     server.use(
-      http.post(`${base}/:id/resolve`, ({ params }) => {
-        resolved = String(params.id);
-        return HttpResponse.json({ success: true, data: null });
-      })
+      http.get(base, () =>
+        HttpResponse.json({
+          success: true,
+          data: conversationsFixture().map((c) => ({
+            ...c,
+            assistantEnabled: false,
+          })),
+        })
+      )
     );
     const user = userEvent.setup();
     render(<ChatsPage />);
     await user.click(await screen.findByRole('button', { name: /Ana Pérez/ }));
 
-    await user.click(
-      await screen.findByRole('button', { name: 'Marcar como resuelto' })
-    );
-
-    await waitFor(() => expect(resolved).toBe('conv-open'));
+    expect(
+      await screen.findByRole('switch', { name: /Asistente/ })
+    ).not.toBeChecked();
   });
 
   it('sends the reply and clears the composer', async () => {

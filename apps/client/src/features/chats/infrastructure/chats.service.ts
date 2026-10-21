@@ -42,12 +42,8 @@ export class ChatsServiceClass {
     data(await this.chatsApi.markAsRead(conversationId));
   }
 
-  async pauseAssistant(conversationId: string): Promise<void> {
-    data(await this.chatsApi.pauseAssistant(conversationId));
-  }
-
-  async resolve(conversationId: string): Promise<void> {
-    data(await this.chatsApi.resolve(conversationId));
+  async setAssistant(conversationId: string, enabled: boolean): Promise<void> {
+    data(await this.chatsApi.setAssistant(conversationId, { enabled }));
   }
 
   async sendTypingIndicator(conversationId: string): Promise<void> {

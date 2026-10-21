@@ -4,6 +4,7 @@ import {
   emptyResponseSchema,
   messageResponseSchema,
   messagesResponseSchema,
+  type TAssistantSwitch,
   type TChatMessage,
   type TChatSabaCustomers,
   type TConversationSummary,
@@ -68,26 +69,14 @@ export class WhatsAppService {
     );
   }
 
-  async pauseAssistant(
+  async setAssistant(
     conversationId: string,
+    data: TAssistantSwitch,
     options?: HttpRequestOptions
   ): Promise<Safe<null>> {
-    return await this.httpClient.post(
-      `${this.basePath}/${encodeURIComponent(conversationId)}/assistant/pause`,
-      undefined,
-      undefined,
-      options,
-      emptyResponseSchema
-    );
-  }
-
-  async resolve(
-    conversationId: string,
-    options?: HttpRequestOptions
-  ): Promise<Safe<null>> {
-    return await this.httpClient.post(
-      `${this.basePath}/${encodeURIComponent(conversationId)}/resolve`,
-      undefined,
+    return await this.httpClient.put(
+      `${this.basePath}/${encodeURIComponent(conversationId)}/assistant`,
+      data,
       undefined,
       options,
       emptyResponseSchema
