@@ -14,10 +14,7 @@ import type { ToolCall } from '../../domain/AssistantRun';
 
 /** Who changed each setting and when, as stored: a Saba profile and an ISO date. */
 export type StoredSettingChanges = Partial<
-  Record<
-    string,
-    { changedBy: { id: string; name: string }; changedAt: string }
-  >
+  Record<string, { changedBy: { id: string; name: string }; changedAt: string }>
 >;
 
 /**

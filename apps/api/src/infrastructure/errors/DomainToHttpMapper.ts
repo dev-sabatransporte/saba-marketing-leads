@@ -7,6 +7,7 @@ import type { DomainErrorCode } from '../i18n/domainMessages';
  * masked 500 discovered in production.
  */
 export const domainErrorHttpStatus: Record<DomainErrorCode, HttpStatus> = {
+  ASSISTANT_MAX_WAIT_BELOW_DEBOUNCE: HttpStatus.BAD_REQUEST,
   AUTH_INVALID_CREDENTIALS: HttpStatus.UNAUTHORIZED,
   AUTH_INVALID_CAPTCHA: HttpStatus.BAD_REQUEST,
   AUTH_TOO_MANY_ATTEMPTS: HttpStatus.TOO_MANY_REQUESTS,

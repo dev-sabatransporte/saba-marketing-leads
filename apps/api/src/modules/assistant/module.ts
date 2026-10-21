@@ -2,7 +2,9 @@ import { Module } from '@nestjs/common';
 import { StructuredLogger } from '../../infrastructure/logging/StructuredLogger';
 import { WhatsAppModule } from '../whatsapp/module';
 import { WHATSAPP_TOKENS } from '../whatsapp/tokens';
+import { GetAssistantSettingsUseCase } from './application/use-cases/GetAssistantSettingsUseCase';
 import { HandleInboundMessageUseCase } from './application/use-cases/HandleInboundMessageUseCase';
+import { UpdateAssistantSettingsUseCase } from './application/use-cases/UpdateAssistantSettingsUseCase';
 import { loadAssistantConfig } from './infrastructure/assistantConfig';
 import { AssistantInboundHandler } from './infrastructure/bus/AssistantInboundHandler';
 import { AnthropicAssistantModel } from './infrastructure/external/AnthropicAssistantModel';
@@ -11,10 +13,12 @@ import { HttpSabaAssistantStores } from './infrastructure/external/HttpSabaAssis
 import { SystemClock } from './infrastructure/external/SystemClock';
 import { DrizzleAssistantRunsRepository } from './infrastructure/persistence/DrizzleAssistantRunsRepository';
 import { DrizzleAssistantSettingsRepository } from './infrastructure/persistence/DrizzleAssistantSettingsRepository';
+import { AssistantSettingsController } from './infrastructure/web/AssistantSettingsController';
 import { ASSISTANT_TOKENS } from './tokens';
 
 @Module({
   imports: [WhatsAppModule],
+  controllers: [AssistantSettingsController],
   providers: [
     {
       provide: ASSISTANT_TOKENS.Config,
@@ -46,6 +50,16 @@ import { ASSISTANT_TOKENS } from './tokens';
       useExisting: HandleInboundMessageUseCase,
     },
     AssistantInboundHandler,
+    GetAssistantSettingsUseCase,
+    {
+      provide: ASSISTANT_TOKENS.GetSettings,
+      useExisting: GetAssistantSettingsUseCase,
+    },
+    UpdateAssistantSettingsUseCase,
+    {
+      provide: ASSISTANT_TOKENS.UpdateSettings,
+      useExisting: UpdateAssistantSettingsUseCase,
+    },
   ],
 })
 export class AssistantModule {}

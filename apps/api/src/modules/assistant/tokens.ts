@@ -9,4 +9,6 @@ export const ASSISTANT_TOKENS = {
   Settings: Symbol('AssistantSettingsRepositoryPort'),
   Runs: Symbol('AssistantRunsRepositoryPort'),
   HandleInboundMessage: Symbol('HandleInboundMessagePort'),
+  GetSettings: Symbol('GetAssistantSettingsPort'),
+  UpdateSettings: Symbol('UpdateAssistantSettingsPort'),
 } as const;
