@@ -151,7 +151,9 @@ class DrizzleInboxScope implements InboxTxScope {
             }
           : {}),
         unreadCount: sql`${c.unreadCount} + 1`,
-        openedAt: sql`case when ${c.status} = 'resolved' then ${moment} else ${c.openedAt} end`,
+        // Reopened: it starts at this message. New: the insert's clock is the
+        // database's, so it is aligned to the first message's own time.
+        openedAt: sql`case when ${c.status} = 'resolved' then ${moment} else least(${c.openedAt}, ${moment}) end`,
         status: 'open',
         updatedAt: new Date(),
       })
