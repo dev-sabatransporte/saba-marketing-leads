@@ -11,9 +11,21 @@ import { Separator } from '@repo/ui/components/separator';
 import React from 'react';
 import { useUpdateAssistantSettings } from '../../application/mutations/useUpdateAssistantSettings.mutation';
 import { useAssistantSettings } from '../../application/queries/useAssistantSettings.query';
-import type { AssistantLimits } from '../../domain/assistantSettings.model';
+import type {
+  AssistantLimits,
+  AssistantSettings,
+} from '../../domain/assistantSettings.model';
 import { AssistantLimitsForm } from '../components/AssistantLimitsForm';
 import { SettingSwitch } from '../components/SettingSwitch';
+
+function limitsOf(settings: AssistantSettings): AssistantLimits {
+  return {
+    perContactDailyLimit: settings.perContactDailyLimit,
+    debounceSeconds: settings.debounceSeconds,
+    maxWaitSeconds: settings.maxWaitSeconds,
+    dailyReplyLimit: settings.dailyReplyLimit,
+  };
+}
 
 /** The "Asistente" section: its switch and limits, applied from the next turn. */
 export function AssistantSettingsCard(): React.JSX.Element {
@@ -63,18 +75,8 @@ export function AssistantSettingsCard(): React.JSX.Element {
             <Separator />
             <AssistantLimitsForm
               // Remounts with what was saved, so the form is no longer dirty.
-              key={[
-                settings.perContactDailyLimit,
-                settings.debounceSeconds,
-                settings.maxWaitSeconds,
-                settings.dailyReplyLimit,
-              ].join('-')}
-              defaultValues={{
-                perContactDailyLimit: settings.perContactDailyLimit,
-                debounceSeconds: settings.debounceSeconds,
-                maxWaitSeconds: settings.maxWaitSeconds,
-                dailyReplyLimit: settings.dailyReplyLimit,
-              }}
+              key={JSON.stringify(limitsOf(settings))}
+              defaultValues={limitsOf(settings)}
               changes={settings.changes}
               onSubmit={saveLimits}
             />

@@ -1,3 +1,5 @@
+import type { TAssistantLimits } from '@repo/schemas';
+
 export type AssistantSettingKey =
   | 'enabled'
   | 'simpleReplies'
@@ -11,12 +13,8 @@ export interface SettingChange {
   changedAt: Date;
 }
 
-export interface AssistantLimits {
-  perContactDailyLimit: number;
-  debounceSeconds: number;
-  maxWaitSeconds: number;
-  dailyReplyLimit: number;
-}
+/** The form validates them with the API's own schema. */
+export type AssistantLimits = TAssistantLimits;
 
 export interface AssistantSettings extends AssistantLimits {
   enabled: boolean;

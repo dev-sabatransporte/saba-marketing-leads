@@ -13,17 +13,6 @@ export const ASSISTANT_SETTINGS_RANGES = {
   dailyReplyLimit: { min: 1, max: 5000 },
 } as const;
 
-export const ASSISTANT_SETTING_KEYS = [
-  'enabled',
-  'simpleReplies',
-  'perContactDailyLimit',
-  'debounceSeconds',
-  'maxWaitSeconds',
-  'dailyReplyLimit',
-] as const;
-export const assistantSettingKeySchema = z.enum(ASSISTANT_SETTING_KEYS);
-export type TAssistantSettingKey = z.infer<typeof assistantSettingKeySchema>;
-
 export const MAX_WAIT_BELOW_DEBOUNCE_MESSAGE =
   'La espera máxima no puede ser menor que la espera.';
 
