@@ -24,6 +24,7 @@
     "db:reset": "npm run db:rollback -- --all && npm run db:migrate"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.132.0",
     "@nestjs/common": "^11.1.14",
     "@nestjs/core": "^11.1.14",
     "@nestjs/cqrs": "^11.0.3",
