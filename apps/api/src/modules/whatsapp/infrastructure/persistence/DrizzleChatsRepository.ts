@@ -161,11 +161,21 @@ export class DrizzleChatsRepository implements ChatsRepositoryPort {
         })
         .returning(messageColumns);
       if (!created) throw new Error('no se guardó el mensaje');
+      const c = whatsappConversations;
+      const moment = sql`${message.waTimestamp.toISOString()}::timestamptz`;
       await tx
-        .update(whatsappConversations)
+        .update(c)
         .set({
           lastMessageAt: message.waTimestamp,
           lastMessagePreview: previewOf(message.body),
+          // A person writing in a resolved chat takes it up again: reopened
+          // from this message, so the assistant does not talk over them.
+          ...(message.source === 'system'
+            ? {
+                status: 'open' as const,
+                openedAt: sql`case when ${c.status} = 'resolved' then ${moment} else ${c.openedAt} end`,
+              }
+            : {}),
           updatedAt: new Date(),
         })
         .where(eq(whatsappConversations.id, message.conversationId));
@@ -258,12 +268,14 @@ export class DrizzleChatsRepository implements ChatsRepositoryPort {
     return updated.length > 0;
   }
 
-  /** Done with it: the pause and the handoff mark go, the assistant may answer again. */
+  /** Done with it: assignment, pause and handoff mark go, the assistant may answer again. */
   async resolve(conversationId: string, at: Date): Promise<boolean> {
     const updated = await this.db
       .update(whatsappConversations)
       .set({
         status: 'resolved',
+        assignedTo: null,
+        assignedAt: null,
         assistantPausedAt: null,
         assistantPausedBy: null,
         handoffRequestedAt: null,

@@ -370,6 +370,8 @@ describe('WhatsApp chats (API)', () => {
     await getTestDb()
       .update(whatsappConversations)
       .set({
+        assignedTo: AGENT.id,
+        assignedAt: ONE_HOUR_AGO,
         assistantPausedAt: ONE_HOUR_AGO,
         assistantPausedBy: AGENT.id,
         handoffRequestedAt: ONE_HOUR_AGO,
@@ -388,6 +390,8 @@ describe('WhatsApp chats (API)', () => {
       .where(eq(whatsappConversations.id, id));
     expect(conversation).toMatchObject({
       status: 'resolved',
+      assignedTo: null,
+      assignedAt: null,
       assistantPausedAt: null,
       assistantPausedBy: null,
       handoffRequestedAt: null,
