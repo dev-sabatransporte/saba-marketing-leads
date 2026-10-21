@@ -27,7 +27,8 @@ const responseSchema = z.object({
 
 type Logger = Pick<StructuredLogger, 'warn' | 'error'>;
 
-class SabaRejectedKeyError extends Error {}
+/** Missing or rejected assistant key: configuration, not an outage. */
+class SabaConfigError extends Error {}
 
 /**
  * Active stores from Saba's assistant endpoints (own key, never the marketing
@@ -69,9 +70,7 @@ export class HttpSabaAssistantStores implements StoresSourcePort {
   private async fetchStores(): Promise<Store[]> {
     const { sabaApiUrl, sabaAssistantKey } = this.config;
     if (!sabaApiUrl || !sabaAssistantKey) {
-      throw new SabaRejectedKeyError(
-        'faltan SABA_API_URL o SABA_ASSISTANT_KEY'
-      );
+      throw new SabaConfigError('faltan SABA_API_URL o SABA_ASSISTANT_KEY');
     }
     const response = await fetch(
       new URL(`${sabaApiUrl}/api/assistant/stores`),
@@ -81,7 +80,7 @@ export class HttpSabaAssistantStores implements StoresSourcePort {
       }
     );
     if (response.status === 401) {
-      throw new SabaRejectedKeyError('Saba rechazó la llave del asistente');
+      throw new SabaConfigError('Saba rechazó la llave del asistente');
     }
     if (!response.ok) throw new Error(`Saba respondió ${response.status}`);
     const parsed = responseSchema.safeParse(await response.json());
@@ -95,7 +94,7 @@ export class HttpSabaAssistantStores implements StoresSourcePort {
   }
 
   private report(error: unknown): void {
-    if (error instanceof SabaRejectedKeyError) {
+    if (error instanceof SabaConfigError) {
       // Configuration, not an outage: retrying does not fix it.
       void this.logger.error(
         `sedes del asistente: ${error.message}; revisar SABA_ASSISTANT_KEY (= ASSISTANT_SERVICE_KEY de Saba)`,
