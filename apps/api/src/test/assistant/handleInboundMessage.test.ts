@@ -42,7 +42,7 @@ const CHAT: ChannelChat = {
 function setup({
   reply = vi.fn(async () => REPLY),
   send = vi.fn(async () => ({ id: 'out-1' })),
-  record = vi.fn(async (_run: NewAssistantRun) => {}),
+  record = vi.fn(async (_run: NewAssistantRun): Promise<void> => undefined),
 }: {
   reply?: () => Promise<ModelReply>;
   send?: () => Promise<{ id: string }>;
