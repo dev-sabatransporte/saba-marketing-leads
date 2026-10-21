@@ -78,6 +78,15 @@ describe('HttpSabaAssistantProducts', () => {
     ]);
   });
 
+  it('treats a search Saba finds no words in as no results', async () => {
+    const { products, logger } = setup(
+      reply(400, { ok: false, code: 'missing_search' })
+    );
+
+    expect(await products.search('¿?')).toEqual([]);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['too many requests', reply(429, { ok: false })],
     ['an outage', reply(503)],

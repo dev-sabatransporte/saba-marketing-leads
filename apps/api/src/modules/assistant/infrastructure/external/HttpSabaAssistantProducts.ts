@@ -6,7 +6,11 @@ import { CatalogUnavailableError } from '../../domain/AssistantErrors';
 import type { Product } from '../../domain/product';
 import { ASSISTANT_TOKENS } from '../../tokens';
 import type { AssistantConfig } from '../assistantConfig';
-import { getFromSabaAssistant, SabaConfigError } from './sabaAssistantApi';
+import {
+  getFromSabaAssistant,
+  SabaConfigError,
+  SabaStatusError,
+} from './sabaAssistantApi';
 
 // Saba's `/api/assistant/products` contract. Only these fields are kept, so
 // nothing else Saba might add ever reaches the model.
@@ -52,6 +56,8 @@ export class HttpSabaAssistantProducts implements ProductCatalogPort {
         inStock: p.in_stock,
       }));
     } catch (error: unknown) {
+      // Saba found no words to search for (`missing_search`): nothing matches.
+      if (error instanceof SabaStatusError && error.status === 400) return [];
       const detail = error instanceof Error ? error.message : String(error);
       if (error instanceof SabaConfigError) {
         void this.logger.error(
