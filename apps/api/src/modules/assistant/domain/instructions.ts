@@ -28,6 +28,13 @@ Cuándo pasar la conversación a un asesor, con la herramienta transfer_to_human
 - Pregunta algo que no es sobre productos, sedes ni horarios: out_of_scope.
 - Pregunta por un dato de sedes que no está en la sección "Sedes" (o no tienes datos de sedes): data_not_found.`;
 
+// Output tokens are the expensive ones, and a short chat reads better on WhatsApp.
+const BREVITY_RULES = `Respuestas simples:
+- Responde solo lo que te preguntaron, en 1 o 2 frases.
+- Preséntate solo en tu primer mensaje de la conversación.
+- Sin listas largas: si preguntan por las sedes en general, nómbralas y pregunta cuál le interesa.
+- No repitas datos que ya diste en la conversación.`;
+
 function describeStore(store: Store): string {
   return [
     `- ${store.name}`,
@@ -37,12 +44,16 @@ function describeStore(store: Store): string {
 }
 
 /**
- * The system prompt. Deterministic for the same stores (no dates, no ids) so
- * the prompt cache keeps hitting between turns.
+ * The system prompt. Deterministic for the same stores and setting (no dates,
+ * no ids) so the prompt cache keeps hitting between turns.
  */
-export function buildInstructions(stores: Store[] | null): string {
+export function buildInstructions(
+  stores: Store[] | null,
+  { simpleReplies }: { simpleReplies: boolean }
+): string {
+  const rules = simpleReplies ? `${RULES}\n\n${BREVITY_RULES}` : RULES;
   const storesSection = stores?.length
     ? stores.map(describeStore).join('\n')
     : 'No tienes datos de sedes en este momento.';
-  return `${RULES}\n\nSedes:\n${storesSection}`;
+  return `${rules}\n\nSedes:\n${storesSection}`;
 }

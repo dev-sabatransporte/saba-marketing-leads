@@ -96,7 +96,7 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
     type: string;
   }): Promise<TurnResult> {
     // Read on every turn: switching it off applies to the next message.
-    const { enabled } = await this.settings.get();
+    const { enabled, simpleReplies } = await this.settings.get();
     if (!enabled) return 'disabled';
     if (!isForTheAssistant(type)) return 'ignored';
 
@@ -147,7 +147,7 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
     }
 
     const decision = await this.decide(
-      buildInstructions(stores),
+      buildInstructions(stores, { simpleReplies }),
       turns,
       toolCalls
     );

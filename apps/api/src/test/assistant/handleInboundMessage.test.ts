@@ -79,6 +79,7 @@ function setup({
   search = vi.fn(async (_query: string): Promise<Product[]> => [BERA]),
   send = vi.fn(async (_id: string, _body: string) => ({ id: 'out-1' })),
   record = vi.fn(async (_run: NewAssistantRun): Promise<void> => undefined),
+  simpleReplies = true,
 }: {
   chat?: ChannelChat;
   /** What the chat looks like once the model has answered. */
@@ -90,10 +91,17 @@ function setup({
   search?: (query: string) => Promise<Product[]>;
   send?: (id: string, body: string) => Promise<{ id: string }>;
   record?: (run: NewAssistantRun) => Promise<void>;
+  simpleReplies?: boolean;
 } = {}) {
   const requestHandoff = vi.fn(async (): Promise<void> => undefined);
   const useCase = new HandleInboundMessageUseCase(
-    { get: async () => ({ ...DEFAULT_ASSISTANT_SETTINGS, enabled: true }) },
+    {
+      get: async () => ({
+        ...DEFAULT_ASSISTANT_SETTINGS,
+        enabled: true,
+        simpleReplies,
+      }),
+    },
     {
       read: vi.fn(async () => chatWhenSending).mockResolvedValueOnce(chat),
       sendAsAssistant: send,
@@ -126,6 +134,19 @@ describe('HandleInboundMessageUseCase', () => {
       })
     );
   });
+
+  it.each([true, false])(
+    'asks the model with the brevity rules only when simple replies is %s',
+    async (simpleReplies) => {
+      const { turn, reply } = setup({ simpleReplies });
+
+      await turn();
+      const [input] = vi.mocked(reply).mock.calls[0] ?? [];
+      expect(input?.instructions.includes('en 1 o 2 frases')).toBe(
+        simpleReplies
+      );
+    }
+  );
 
   it('searches Saba when the model asks, and answers with the result', async () => {
     const reply = vi

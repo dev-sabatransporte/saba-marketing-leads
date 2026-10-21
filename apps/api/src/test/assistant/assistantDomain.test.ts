@@ -25,15 +25,21 @@ const line = (
 ): ChatLine => ({ id: `m${++nextId}`, source, type, body, status });
 
 describe('buildInstructions', () => {
+  const PLAIN = { simpleReplies: false };
+  const SIMPLE = { simpleReplies: true };
+
   it('lists every store with its address and hours, never its map link', () => {
-    const text = buildInstructions([
-      {
-        name: 'Catia',
-        address: 'Av. Sucre',
-        mapUrl: 'https://maps.app.goo.gl/x',
-        publicHours: 'Lunes a viernes 8:00 a. m. a 5:00 p. m.',
-      },
-    ]);
+    const text = buildInstructions(
+      [
+        {
+          name: 'Catia',
+          address: 'Av. Sucre',
+          mapUrl: 'https://maps.app.goo.gl/x',
+          publicHours: 'Lunes a viernes 8:00 a. m. a 5:00 p. m.',
+        },
+      ],
+      PLAIN
+    );
 
     expect(text).toContain('asistente virtual de Saba');
     expect(text).toContain('Catia');
@@ -44,25 +50,35 @@ describe('buildInstructions', () => {
   });
 
   it('tells the model to always name the store, so code can add its map link', () => {
-    expect(buildInstructions(null)).toContain(
+    expect(buildInstructions(null, PLAIN)).toContain(
       'Menciona siempre la sede por su nombre'
     );
   });
 
   it('says plainly when a store has no hours, so the model does not invent them', () => {
-    const text = buildInstructions([
-      { name: 'Iglesia', address: 'Calle 1', mapUrl: null, publicHours: null },
-    ]);
+    const text = buildInstructions(
+      [
+        {
+          name: 'Iglesia',
+          address: 'Calle 1',
+          mapUrl: null,
+          publicHours: null,
+        },
+      ],
+      PLAIN
+    );
 
     expect(text).toMatch(/Iglesia[\s\S]*Horario: no disponible/);
   });
 
   it('without stores it tells the model it has no store data', () => {
-    expect(buildInstructions(null)).toContain('No tienes datos de sedes');
+    expect(buildInstructions(null, PLAIN)).toContain(
+      'No tienes datos de sedes'
+    );
   });
 
   it('tells the model to hand over with transfer_to_human, not to improvise', () => {
-    const text = buildInstructions(null);
+    const text = buildInstructions(null, PLAIN);
     expect(text).toContain('transfer_to_human');
     expect(text).toContain('data_not_found');
     expect(text).toContain('pricing');
@@ -70,7 +86,7 @@ describe('buildInstructions', () => {
   });
 
   it('tells the model to search products and to answer only with what comes back', () => {
-    const text = buildInstructions(null);
+    const text = buildInstructions(null, PLAIN);
     expect(text).toContain('search_products');
     expect(text).toContain('in_stock');
     expect(text).toContain('out_of_stock');
@@ -78,7 +94,7 @@ describe('buildInstructions', () => {
   });
 
   it('hands over every question about price, down payment, instalments or credit', () => {
-    const text = buildInstructions(null);
+    const text = buildInstructions(null, PLAIN);
     for (const word of [
       'precio',
       'inicial',
@@ -91,7 +107,7 @@ describe('buildInstructions', () => {
   });
 
   it('tells the model to decide by the latest message and to answer greetings', () => {
-    const text = buildInstructions(null);
+    const text = buildInstructions(null, PLAIN);
     expect(text).toContain('último mensaje del cliente');
     expect(text).toMatch(/saludo/i);
   });
@@ -100,7 +116,33 @@ describe('buildInstructions', () => {
     const stores = [
       { name: 'Catia', address: null, mapUrl: null, publicHours: null },
     ];
-    expect(buildInstructions(stores)).toBe(buildInstructions(stores));
+    expect(buildInstructions(stores, PLAIN)).toBe(
+      buildInstructions(stores, PLAIN)
+    );
+  });
+
+  it('adds the brevity rules only with simple replies on', () => {
+    const simple = buildInstructions(null, SIMPLE);
+    const plain = buildInstructions(null, PLAIN);
+
+    for (const rule of [
+      'Responde solo lo que te preguntaron, en 1 o 2 frases',
+      'Preséntate solo en tu primer mensaje',
+      'Sin listas largas',
+      'No repitas datos que ya diste',
+    ]) {
+      expect(simple).toContain(rule);
+      expect(plain).not.toContain(rule);
+    }
+  });
+
+  it('is the same text for the same stores and setting, so the prompt cache hits', () => {
+    const stores = [
+      { name: 'Catia', address: null, mapUrl: null, publicHours: null },
+    ];
+    expect(buildInstructions(stores, SIMPLE)).toBe(
+      buildInstructions(stores, SIMPLE)
+    );
   });
 });
 
