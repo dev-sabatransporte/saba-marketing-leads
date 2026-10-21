@@ -72,22 +72,7 @@ export class AnthropicAssistantModel implements AssistantModelPort {
       throw new ModelUnavailableError('api_error', detail);
     }
 
-    if (response.stop_reason === 'refusal') {
-      throw new ModelUnavailableError(
-        'refusal',
-        'el modelo se negó a responder'
-      );
-    }
-    const text = response.content
-      .flatMap((block) => (block.type === 'text' ? [block.text] : []))
-      .join('')
-      .trim();
-    if (!text) {
-      throw new ModelUnavailableError('empty', 'el modelo no devolvió texto');
-    }
-
-    return {
-      text,
+    const billed = {
       model: response.model,
       usage: {
         inputTokens: response.usage.input_tokens,
@@ -96,5 +81,25 @@ export class AnthropicAssistantModel implements AssistantModelPort {
         cacheWriteTokens: response.usage.cache_creation_input_tokens ?? 0,
       },
     };
+    if (response.stop_reason === 'refusal') {
+      throw new ModelUnavailableError(
+        'refusal',
+        'el modelo se negó a responder',
+        billed
+      );
+    }
+    const text = response.content
+      .flatMap((block) => (block.type === 'text' ? [block.text] : []))
+      .join('')
+      .trim();
+    if (!text) {
+      throw new ModelUnavailableError(
+        'empty',
+        'el modelo no devolvió texto',
+        billed
+      );
+    }
+
+    return { text, ...billed };
   }
 }

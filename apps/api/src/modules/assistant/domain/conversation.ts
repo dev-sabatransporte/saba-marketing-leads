@@ -2,9 +2,12 @@ const WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /** A chat message as the assistant sees it. */
 export interface ChatLine {
+  id: string;
   source: 'customer' | 'system' | 'phone' | 'history' | 'assistant';
   type: string;
   body: string | null;
+  /** Outbound delivery status; `null` for the customer's messages. */
+  status: string | null;
 }
 
 export interface ModelTurn {
@@ -16,13 +19,14 @@ export interface ModelTurn {
  * The history the model reads: the customer's text and the assistant's own
  * replies. Messages from people in the panel are left out (when a person
  * takes the chat the assistant goes silent anyway), and so is anything that is
- * not text. The API needs alternating roles starting with the customer, so
+ * not text, nor a reply that never reached the customer. The API needs
+ * alternating roles starting with the customer, so
  * consecutive lines are joined. Empty when the customer has nothing pending.
  */
 export function toModelTurns(lines: ChatLine[]): ModelTurn[] {
   const turns: ModelTurn[] = [];
-  for (const { source, type, body } of lines) {
-    if (type !== 'text' || !body?.trim()) continue;
+  for (const { source, type, body, status } of lines) {
+    if (type !== 'text' || !body?.trim() || status === 'failed') continue;
     const role =
       source === 'customer'
         ? 'user'
@@ -36,6 +40,18 @@ export function toModelTurns(lines: ChatLine[]): ModelTurn[] {
     else turns.push({ role, content: body });
   }
   return turns.at(-1)?.role === 'user' ? turns : [];
+}
+
+/**
+ * Whether `messageId` is still the customer's last message. When several
+ * arrive together each one starts a turn; only the turn of the newest answers,
+ * and it sees all of them.
+ */
+export function isLatestCustomerMessage(
+  lines: ChatLine[],
+  messageId: string
+): boolean {
+  return lines.findLast((l) => l.source === 'customer')?.id === messageId;
 }
 
 /** Meta only accepts free text for 24 h after the customer's last message. */

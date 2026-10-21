@@ -1,16 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
   type ChatLine,
+  isLatestCustomerMessage,
   toModelTurns,
   withinReplyWindow,
 } from '../../modules/assistant/domain/conversation';
 import { buildInstructions } from '../../modules/assistant/domain/instructions';
 
+let nextId = 0;
 const line = (
   source: ChatLine['source'],
   body: string | null,
-  type = 'text'
-): ChatLine => ({ source, type, body });
+  type = 'text',
+  status: string | null = null
+): ChatLine => ({ id: `m${++nextId}`, source, type, body, status });
 
 describe('buildInstructions', () => {
   it('lists every store with its address, map and hours', () => {
@@ -81,6 +84,30 @@ describe('toModelTurns', () => {
     expect(
       toModelTurns([line('customer', 'hola'), line('assistant', 'Hola')])
     ).toEqual([]);
+  });
+});
+
+describe('toModelTurns with replies that did not go out', () => {
+  it('leaves out a reply that failed to send', () => {
+    expect(
+      toModelTurns([
+        line('customer', 'hola'),
+        line('assistant', 'Hola, soy el asistente', 'text', 'failed'),
+        line('customer', '¿siguen ahí?'),
+      ])
+    ).toEqual([{ role: 'user', content: 'hola\n¿siguen ahí?' }]);
+  });
+});
+
+describe('isLatestCustomerMessage', () => {
+  it('is true only for the customer last message', () => {
+    const first = line('customer', 'hola');
+    const second = line('customer', '¿dónde queda Catia?');
+    const lines = [first, second, line('assistant', 'Hola')];
+
+    expect(isLatestCustomerMessage(lines, second.id)).toBe(true);
+    expect(isLatestCustomerMessage(lines, first.id)).toBe(false);
+    expect(isLatestCustomerMessage([], first.id)).toBe(false);
   });
 });
 

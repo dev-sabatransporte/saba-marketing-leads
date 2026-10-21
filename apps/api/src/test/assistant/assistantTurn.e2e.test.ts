@@ -198,6 +198,39 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
     expect(run.latencyMs).toBeGreaterThanOrEqual(0);
   });
 
+  it('answers several messages that arrive together with a single reply', async () => {
+    await turnOn();
+
+    await receive({
+      messaging_product: 'whatsapp',
+      contacts: [{ wa_id: '584140000001', profile: { name: 'Cliente' } }],
+      messages: [
+        {
+          id: 'wamid.A',
+          from: '584140000001',
+          timestamp: String(CUSTOMER_SENT_AT),
+          type: 'text',
+          text: { body: 'hola' },
+        },
+        {
+          id: 'wamid.B',
+          from: '584140000001',
+          timestamp: String(CUSTOMER_SENT_AT + 1),
+          type: 'text',
+          text: { body: '¿dónde queda Catia?' },
+        },
+      ],
+    });
+    await waitForRun();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(reply.mock.calls[0]?.[0].turns).toEqual([
+      { role: 'user', content: 'hola\n¿dónde queda Catia?' },
+    ]);
+    expect(await getTestDb().select().from(assistantRuns)).toHaveLength(1);
+  });
+
   it('switched off, everything works as today: nothing is sent or recorded', async () => {
     await receive(textMessage('hola'));
 

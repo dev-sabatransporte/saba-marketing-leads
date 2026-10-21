@@ -1,14 +1,21 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ModelUnavailableError } from '../../domain/AssistantErrors';
-import type { TokenUsage } from '../../domain/AssistantRun';
-import { toModelTurns, withinReplyWindow } from '../../domain/conversation';
+import type { NewAssistantRun } from '../../domain/AssistantRun';
+import {
+  isLatestCustomerMessage,
+  toModelTurns,
+  withinReplyWindow,
+} from '../../domain/conversation';
 import { buildInstructions } from '../../domain/instructions';
 import { ASSISTANT_TOKENS } from '../../tokens';
 import type {
   HandleInboundMessagePort,
   TurnResult,
 } from '../ports/in/HandleInboundMessagePort';
-import type { AssistantModelPort } from '../ports/out/AssistantModelPort';
+import type {
+  AssistantModelPort,
+  ModelReply,
+} from '../ports/out/AssistantModelPort';
 import type { AssistantRunsRepositoryPort } from '../ports/out/AssistantRunsRepositoryPort';
 import type { AssistantSettingsRepositoryPort } from '../ports/out/AssistantSettingsRepositoryPort';
 import type { ChatChannelPort } from '../ports/out/ChatChannelPort';
@@ -57,46 +64,73 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
     ) {
       return 'ignored';
     }
+    // Several messages at once: only the newest one's turn answers them all.
+    if (!isLatestCustomerMessage(chat.messages, messageId)) return 'ignored';
     const turns = toModelTurns(chat.messages);
     if (!turns.length) return 'ignored';
 
     const startedAt = this.clock.now().getTime();
-    const base = { conversationId, inboundMessageIds: [messageId] };
-    let model: string | null = null;
-    let usage: TokenUsage | null = null;
+    const run = (
+      fields: Pick<
+        NewAssistantRun,
+        | 'sentMessageId'
+        | 'outcome'
+        | 'reason'
+        | 'errorDetail'
+        | 'model'
+        | 'usage'
+      >
+    ): Promise<void> =>
+      this.runs.record({
+        conversationId,
+        inboundMessageIds: [messageId],
+        latencyMs: this.clock.now().getTime() - startedAt,
+        ...fields,
+      });
+
+    let answer: ModelReply;
     try {
       const instructions = buildInstructions(await this.stores.current());
-      const answer = await this.model.reply({ instructions, turns });
-      model = answer.model;
-      usage = answer.usage;
-      const sent = await this.channel.sendAsAssistant(
-        conversationId,
-        answer.text
-      );
-      await this.runs.record({
-        ...base,
-        sentMessageId: sent.id,
-        outcome: 'answered',
-        reason: null,
-        errorDetail: null,
-        model,
-        usage,
-        latencyMs: this.clock.now().getTime() - startedAt,
-      });
-      return 'answered';
+      answer = await this.model.reply({ instructions, turns });
     } catch (error: unknown) {
-      await this.runs.record({
-        ...base,
+      const unavailable = error instanceof ModelUnavailableError ? error : null;
+      await run({
         sentMessageId: null,
         outcome: 'error',
-        reason:
-          error instanceof ModelUnavailableError ? error.reason : 'send_failed',
+        reason: unavailable?.reason ?? 'model_failed',
         errorDetail: error instanceof Error ? error.message : String(error),
-        model,
-        usage,
-        latencyMs: this.clock.now().getTime() - startedAt,
+        model: unavailable?.billed?.model ?? null,
+        usage: unavailable?.billed?.usage ?? null,
       });
       return 'error';
     }
+
+    let sentMessageId: string;
+    try {
+      sentMessageId = (
+        await this.channel.sendAsAssistant(conversationId, answer.text)
+      ).id;
+    } catch (error: unknown) {
+      await run({
+        sentMessageId: null,
+        outcome: 'error',
+        reason: 'send_failed',
+        errorDetail: error instanceof Error ? error.message : String(error),
+        model: answer.model,
+        usage: answer.usage,
+      });
+      return 'error';
+    }
+
+    // Outside the try: a failure here must not log a reply that did go out as failed.
+    await run({
+      sentMessageId,
+      outcome: 'answered',
+      reason: null,
+      errorDetail: null,
+      model: answer.model,
+      usage: answer.usage,
+    });
+    return 'answered';
   }
 }
