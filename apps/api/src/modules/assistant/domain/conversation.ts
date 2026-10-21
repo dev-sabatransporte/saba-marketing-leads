@@ -1,5 +1,12 @@
 const WINDOW_MS = 24 * 60 * 60 * 1000;
 
+// A 👍 on a reply or a WhatsApp notice is not something to answer or hand over.
+const NOT_FOR_THE_ASSISTANT = new Set(['reaction', 'system']);
+
+export function isForTheAssistant(type: string): boolean {
+  return !NOT_FOR_THE_ASSISTANT.has(type);
+}
+
 /** A chat message as the assistant sees it. */
 export interface ChatLine {
   id: string;
@@ -51,7 +58,10 @@ export function isLatestCustomerMessage(
   lines: ChatLine[],
   messageId: string
 ): boolean {
-  return lines.findLast((l) => l.source === 'customer')?.id === messageId;
+  return (
+    lines.findLast((l) => l.source === 'customer' && isForTheAssistant(l.type))
+      ?.id === messageId
+  );
 }
 
 /** Meta only accepts free text for 24 h after the customer's last message. */

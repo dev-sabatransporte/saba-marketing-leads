@@ -131,7 +131,7 @@ describe('AnthropicAssistantModel', () => {
 
     await expect(
       new AnthropicAssistantModel(CONFIG).reply(INPUT)
-    ).rejects.toMatchObject({ reason: 'empty' });
+    ).rejects.toMatchObject({ reason: 'invalid_tool_input' });
   });
 
   it('returns the text, the model and the tokens', async () => {

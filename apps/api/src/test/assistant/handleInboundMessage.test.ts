@@ -151,6 +151,25 @@ describe('HandleInboundMessageUseCase', () => {
     expect(requestHandoff).toHaveBeenCalledWith('c-1', 'non_text');
   });
 
+  it('ignores a reaction: nothing to answer or hand over', async () => {
+    const { turn, reply, requestHandoff, send } = setup();
+
+    expect(await turn('react-1', 'reaction')).toBe('ignored');
+    expect(reply).not.toHaveBeenCalled();
+    expect(requestHandoff).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('sends no notice if the chat could not be marked', async () => {
+    const { turn, send, requestHandoff } = setup({
+      stores: { stores: null, misconfigured: true },
+    });
+    requestHandoff.mockRejectedValue(new Error('base caída'));
+
+    await expect(turn()).rejects.toThrow('base caída');
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it('hands over with error when Saba rejects the assistant key', async () => {
     const { turn, reply, requestHandoff } = setup({
       stores: { stores: null, misconfigured: true },

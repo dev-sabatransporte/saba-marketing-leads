@@ -117,6 +117,13 @@ describe('isLatestCustomerMessage', () => {
     expect(isLatestCustomerMessage(lines, first.id)).toBe(false);
     expect(isLatestCustomerMessage([], first.id)).toBe(false);
   });
+
+  it('ignores a reaction that came after the question', () => {
+    const question = line('customer', '¿dónde queda Catia?');
+    const lines = [question, line('customer', null, 'reaction')];
+
+    expect(isLatestCustomerMessage(lines, question.id)).toBe(true);
+  });
 });
 
 describe('withinReplyWindow', () => {

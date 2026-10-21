@@ -122,7 +122,7 @@ export class AnthropicAssistantModel implements AssistantModelPort {
       const input = transferInputSchema.safeParse(transfer.input);
       if (!input.success) {
         throw new ModelUnavailableError(
-          'empty',
+          'invalid_tool_input',
           'transfer_to_human con un motivo desconocido',
           billed
         );

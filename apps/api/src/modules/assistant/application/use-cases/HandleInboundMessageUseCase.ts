@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ModelUnavailableError } from '../../domain/AssistantErrors';
 import type { NewAssistantRun } from '../../domain/AssistantRun';
 import {
+  isForTheAssistant,
   isLatestCustomerMessage,
   toModelTurns,
   withinReplyWindow,
@@ -25,6 +26,10 @@ import type { StoresSourcePort } from '../ports/out/StoresSourcePort';
 
 // Enough context for a short WhatsApp exchange without paying for old chats.
 const HISTORY_LIMIT = 20;
+
+function describe(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 type RunFields = Pick<
   NewAssistantRun,
@@ -62,6 +67,7 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
     // Read on every turn: switching it off applies to the next message.
     const { enabled } = await this.settings.get();
     if (!enabled) return 'disabled';
+    if (!isForTheAssistant(type)) return 'ignored';
 
     const chat = await this.channel.read(conversationId, HISTORY_LIMIT);
     if (
@@ -115,7 +121,7 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
       });
     } catch (error: unknown) {
       const unavailable = error instanceof ModelUnavailableError ? error : null;
-      const detail = error instanceof Error ? error.message : String(error);
+      const detail = describe(error);
       return handOver('error', {
         errorDetail: unavailable ? `${unavailable.reason}: ${detail}` : detail,
         model: unavailable?.billed?.model ?? null,
@@ -134,7 +140,7 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
       ).id;
     } catch (error: unknown) {
       return handOver('error', {
-        errorDetail: `send_failed: ${error instanceof Error ? error.message : String(error)}`,
+        errorDetail: `send_failed: ${describe(error)}`,
         ...billed,
       });
     }
@@ -151,9 +157,10 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
   }
 
   /**
-   * Tells the customer with a fixed text, marks the chat for a person and
-   * records why. The mark goes in even if the notice fails: someone has to
-   * pick the chat up either way.
+   * Marks the chat for a person, tells the customer with a fixed text and
+   * records why. The mark goes first: if it fails nothing is sent and the
+   * assistant does not keep answering a chat it meant to hand over; if only
+   * the notice fails, someone still picks the chat up.
    */
   private async handOver(
     conversationId: string,
@@ -161,6 +168,7 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
     details: Pick<RunFields, 'errorDetail' | 'model' | 'usage'>,
     run: (fields: RunFields) => Promise<void>
   ): Promise<TurnResult> {
+    await this.channel.requestHandoff(conversationId, reason);
     let sentMessageId: string | null = null;
     let noticeError: string | null = null;
     try {
@@ -168,9 +176,8 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
         await this.channel.sendAsAssistant(conversationId, HANDOFF_NOTICE)
       ).id;
     } catch (error: unknown) {
-      noticeError = `aviso no enviado: ${error instanceof Error ? error.message : String(error)}`;
+      noticeError = `aviso no enviado: ${describe(error)}`;
     }
-    await this.channel.requestHandoff(conversationId, reason);
     await run({
       ...details,
       sentMessageId,
