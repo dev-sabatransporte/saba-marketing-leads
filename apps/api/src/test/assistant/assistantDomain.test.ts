@@ -112,15 +112,6 @@ describe('buildInstructions', () => {
     expect(text).toMatch(/saludo/i);
   });
 
-  it('is the same text for the same stores, so the prompt cache hits', () => {
-    const stores = [
-      { name: 'Catia', address: null, mapUrl: null, publicHours: null },
-    ];
-    expect(buildInstructions(stores, PLAIN)).toBe(
-      buildInstructions(stores, PLAIN)
-    );
-  });
-
   it('adds the brevity rules only with simple replies on', () => {
     const simple = buildInstructions(null, SIMPLE);
     const plain = buildInstructions(null, PLAIN);
@@ -128,7 +119,7 @@ describe('buildInstructions', () => {
     for (const rule of [
       'Responde solo lo que te preguntaron, en 1 o 2 frases',
       'Preséntate solo en tu primer mensaje',
-      'Sin listas largas',
+      'Sin listas largas: si preguntan por las sedes en general, nómbralas y pregunta cuál le interesa',
       'No repitas datos que ya diste',
     ]) {
       expect(simple).toContain(rule);
@@ -136,14 +127,17 @@ describe('buildInstructions', () => {
     }
   });
 
-  it('is the same text for the same stores and setting, so the prompt cache hits', () => {
-    const stores = [
-      { name: 'Catia', address: null, mapUrl: null, publicHours: null },
-    ];
-    expect(buildInstructions(stores, SIMPLE)).toBe(
-      buildInstructions(stores, SIMPLE)
-    );
-  });
+  it.each([PLAIN, SIMPLE])(
+    'is the same text for the same stores and setting %o, so the prompt cache hits',
+    (setting) => {
+      const stores = [
+        { name: 'Catia', address: null, mapUrl: null, publicHours: null },
+      ];
+      expect(buildInstructions(stores, setting)).toBe(
+        buildInstructions(stores, setting)
+      );
+    }
+  );
 });
 
 describe('toModelTurns', () => {

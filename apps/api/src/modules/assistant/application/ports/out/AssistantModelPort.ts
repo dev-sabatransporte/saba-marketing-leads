@@ -31,7 +31,7 @@ export interface AssistantModelPort {
     instructions: string;
     turns: ModelTurn[];
     searches: ProductSearch[];
-    /** Caps the output low; a reply that hits the cap is unusable. */
+    /** Shortest possible answers: the output cap drops, so a longer one is cut and unusable. */
     simpleReplies: boolean;
   }): Promise<ModelReply>;
 }
