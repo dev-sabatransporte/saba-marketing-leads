@@ -13,24 +13,15 @@ export class ConversationActionsUseCase implements ConversationActionsPort {
     @Inject(WHATSAPP_TOKENS.Clock) private readonly clock: ClockPort
   ) {}
 
-  async pauseAssistant(
+  async setAssistantEnabled(
     conversationId: string,
-    pausedBy: string
+    enabled: boolean,
+    by: string
   ): Promise<void> {
-    if (
-      !(await this.chats.pauseAssistant(
-        conversationId,
-        pausedBy,
-        this.clock.now()
-      ))
-    ) {
-      throw new ConversationNotFoundException();
-    }
-  }
-
-  async resolve(conversationId: string): Promise<void> {
-    if (!(await this.chats.resolve(conversationId, this.clock.now()))) {
-      throw new ConversationNotFoundException();
-    }
+    const now = this.clock.now();
+    const found = enabled
+      ? await this.chats.turnAssistantOn(conversationId, now)
+      : await this.chats.turnAssistantOff(conversationId, by, now);
+    if (!found) throw new ConversationNotFoundException();
   }
 }

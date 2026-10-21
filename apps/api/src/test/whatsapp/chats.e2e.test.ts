@@ -343,12 +343,12 @@ describe('WhatsApp chats (API)', () => {
     expect(sendText).not.toHaveBeenCalled();
   });
 
-  it('pauses the assistant in a chat, recording who and when', async () => {
+  it('turns the assistant off in a chat, recording who and when', async () => {
     const id = await createChat({ lastInboundAt: ONE_HOUR_AGO });
 
-    const res = await request(app.getHttpServer()).post(
-      `/whatsapp/conversations/${id}/assistant/pause`
-    );
+    const res = await request(app.getHttpServer())
+      .put(`/whatsapp/conversations/${id}/assistant`)
+      .send({ enabled: false });
 
     expect(res.status).toBe(200);
     const [conversation] = await getTestDb()
@@ -362,10 +362,10 @@ describe('WhatsApp chats (API)', () => {
     const list = await request(app.getHttpServer()).get(
       '/whatsapp/conversations'
     );
-    expect(list.body.data[0]).toMatchObject({ assistantPaused: true });
+    expect(list.body.data[0]).toMatchObject({ assistantEnabled: false });
   });
 
-  it('resolves a chat: clears the pause and the handoff mark', async () => {
+  it('turns it back on: clears the off switch, the handoff mark and the assignment', async () => {
     const id = await createChat({ lastInboundAt: ONE_HOUR_AGO });
     await getTestDb()
       .update(whatsappConversations)
@@ -379,9 +379,9 @@ describe('WhatsApp chats (API)', () => {
       })
       .where(eq(whatsappConversations.id, id));
 
-    const res = await request(app.getHttpServer()).post(
-      `/whatsapp/conversations/${id}/resolve`
-    );
+    const res = await request(app.getHttpServer())
+      .put(`/whatsapp/conversations/${id}/assistant`)
+      .send({ enabled: true });
 
     expect(res.status).toBe(200);
     const [conversation] = await getTestDb()
@@ -389,24 +389,52 @@ describe('WhatsApp chats (API)', () => {
       .from(whatsappConversations)
       .where(eq(whatsappConversations.id, id));
     expect(conversation).toMatchObject({
-      status: 'resolved',
       assignedTo: null,
       assignedAt: null,
       assistantPausedAt: null,
       assistantPausedBy: null,
       handoffRequestedAt: null,
       handoffReason: null,
+      // Earlier replies by a person no longer keep it silent.
+      openedAt: NOW,
+    });
+    const list = await request(app.getHttpServer()).get(
+      '/whatsapp/conversations'
+    );
+    expect(list.body.data[0]).toMatchObject({ assistantEnabled: true });
+  });
+
+  it('a reply from the panel turns the assistant off in that chat', async () => {
+    const id = await createChat({ lastInboundAt: ONE_HOUR_AGO });
+    sendText.mockResolvedValue('wamid.PANEL');
+
+    await request(app.getHttpServer())
+      .post(`/whatsapp/conversations/${id}/messages`)
+      .send({ body: 'Hola, te atiende Ana' });
+
+    const [conversation] = await getTestDb()
+      .select()
+      .from(whatsappConversations)
+      .where(eq(whatsappConversations.id, id));
+    expect(conversation).toMatchObject({
+      assistantPausedAt: NOW,
+      assistantPausedBy: AGENT.id,
     });
   });
 
-  it('answers 404 when pausing or resolving a chat that does not exist', async () => {
-    const missing = '00000000-0000-4000-8000-000000000000';
-    for (const action of ['assistant/pause', 'resolve']) {
-      const res = await request(app.getHttpServer()).post(
-        `/whatsapp/conversations/${missing}/${action}`
-      );
-      expect(res.status).toBe(404);
-    }
+  it('rejects a body without enabled and answers 404 for a chat that does not exist', async () => {
+    const id = await createChat({ lastInboundAt: ONE_HOUR_AGO });
+    const bad = await request(app.getHttpServer())
+      .put(`/whatsapp/conversations/${id}/assistant`)
+      .send({});
+    expect(bad.status).toBe(400);
+
+    const missing = await request(app.getHttpServer())
+      .put(
+        '/whatsapp/conversations/00000000-0000-4000-8000-000000000000/assistant'
+      )
+      .send({ enabled: true });
+    expect(missing.status).toBe(404);
   });
 
   it('marks the conversation as read', async () => {

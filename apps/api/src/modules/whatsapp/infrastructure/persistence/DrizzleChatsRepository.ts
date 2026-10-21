@@ -162,18 +162,17 @@ export class DrizzleChatsRepository implements ChatsRepositoryPort {
         .returning(messageColumns);
       if (!created) throw new Error('no se guardó el mensaje');
       const c = whatsappConversations;
-      const moment = sql`${message.waTimestamp.toISOString()}::timestamptz`;
       await tx
         .update(c)
         .set({
           lastMessageAt: message.waTimestamp,
           lastMessagePreview: previewOf(message.body),
-          // A person writing in a resolved chat takes it up again: reopened
-          // from this message, so the assistant does not talk over them.
+          // A person writing turns the assistant off in this chat, so it does
+          // not talk over them; whoever turned it off first stays recorded.
           ...(message.source === 'system'
             ? {
-                status: 'open' as const,
-                openedAt: sql`case when ${c.status} = 'resolved' then ${moment} else ${c.openedAt} end`,
+                assistantPausedAt: sql`coalesce(${c.assistantPausedAt}, ${message.waTimestamp.toISOString()}::timestamptz)`,
+                assistantPausedBy: sql`coalesce(${c.assistantPausedBy}, ${message.sentBy}::uuid)`,
               }
             : {}),
           updatedAt: new Date(),
@@ -251,35 +250,35 @@ export class DrizzleChatsRepository implements ChatsRepositoryPort {
       );
   }
 
-  async pauseAssistant(
+  async turnAssistantOff(
     conversationId: string,
-    pausedBy: string,
+    by: string,
     at: Date
   ): Promise<boolean> {
     const updated = await this.db
       .update(whatsappConversations)
-      .set({
-        assistantPausedAt: at,
-        assistantPausedBy: pausedBy,
-        updatedAt: at,
-      })
+      .set({ assistantPausedAt: at, assistantPausedBy: by, updatedAt: at })
       .where(eq(whatsappConversations.id, conversationId))
       .returning({ id: whatsappConversations.id });
     return updated.length > 0;
   }
 
-  /** Done with it: assignment, pause and handoff mark go, the assistant may answer again. */
-  async resolve(conversationId: string, at: Date): Promise<boolean> {
+  /**
+   * The assistant takes the chat back: off switch, handoff mark and
+   * assignment go, and the chat counts as opened now, so earlier replies by a
+   * person no longer keep it silent.
+   */
+  async turnAssistantOn(conversationId: string, at: Date): Promise<boolean> {
     const updated = await this.db
       .update(whatsappConversations)
       .set({
-        status: 'resolved',
-        assignedTo: null,
-        assignedAt: null,
         assistantPausedAt: null,
         assistantPausedBy: null,
         handoffRequestedAt: null,
         handoffReason: null,
+        assignedTo: null,
+        assignedAt: null,
+        openedAt: at,
         updatedAt: at,
       })
       .where(eq(whatsappConversations.id, conversationId))

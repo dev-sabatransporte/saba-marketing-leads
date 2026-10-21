@@ -8,10 +8,12 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Put,
   Req,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
+  assistantSwitchSchema,
   chatSabaCustomersResponseSchema,
   conversationsResponseSchema,
   emptyResponseSchema,
@@ -51,6 +53,7 @@ import {
 } from './ChatsPresenter';
 
 class SendMessageDto extends createZodDto(sendMessageSchema) {}
+class AssistantSwitchDto extends createZodDto(assistantSwitchSchema) {}
 
 // For now `marketing:access` covers the whole inbox; fine-grained permissions
 // (`whatsapp_chats.*`) are pending in the plan.
@@ -124,32 +127,20 @@ export class ChatsController {
     return { success: true, data: null };
   }
 
-  @Post(':id/assistant/pause')
-  @HttpCode(HttpStatus.OK)
+  @Put(':id/assistant')
   @ApiOperation({
-    summary: 'Pausa el asistente en esta conversación hasta que se resuelva',
+    summary: 'Activa o desactiva el asistente en esta conversación',
+    description:
+      'Al activarlo se quitan la marca "Necesita asesor" y la asignación, y el asistente responde desde el siguiente mensaje del cliente. Responder desde el panel lo desactiva solo.',
   })
+  @ZodApiBody(assistantSwitchSchema)
   @ZodApiResponse(HttpStatus.OK, emptyResponseSchema)
-  async pauseAssistant(
+  async setAssistant(
     @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: AssistantSwitchDto,
     @CurrentUser() user: AuthenticatedUser
   ): Promise<TEmptyResponse> {
-    await this.actions.pauseAssistant(id, user.id);
-    return { success: true, data: null };
-  }
-
-  @Post(':id/resolve')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Marca la conversación como resuelta',
-    description:
-      'Quita la pausa del asistente y la marca "Necesita asesor": cuando el cliente vuelva a escribir, el asistente responde de nuevo.',
-  })
-  @ZodApiResponse(HttpStatus.OK, emptyResponseSchema)
-  async resolve(
-    @Param('id', ParseUUIDPipe) id: string
-  ): Promise<TEmptyResponse> {
-    await this.actions.resolve(id);
+    await this.actions.setAssistantEnabled(id, body.enabled, user.id);
     return { success: true, data: null };
   }
 

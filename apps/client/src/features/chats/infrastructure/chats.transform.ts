@@ -24,7 +24,7 @@ export function toConversationDomain(dto: TConversationSummary): Conversation {
     lastMessageAt: date(dto.lastMessageAt),
     lastMessagePreview: dto.lastMessagePreview,
     needsAgent: dto.needsAgent,
-    assistantPaused: dto.assistantPaused,
+    assistantEnabled: dto.assistantEnabled,
     windowExpiresAt: date(dto.windowExpiresAt),
   };
 }

@@ -436,20 +436,17 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
     await customerWritesAgainAndNobodyAnswers();
   });
 
-  it('stays silent once someone pauses it in the chat', async () => {
+  it('stays silent once someone turns it off in the chat', async () => {
     const id = await chatStarted();
     await app
       .get<ConversationActionsPort>(WHATSAPP_TOKENS.ConversationActions)
-      .pauseAssistant(id, '11111111-1111-1111-1111-111111111111');
+      .setAssistantEnabled(id, false, '11111111-1111-1111-1111-111111111111');
 
     await customerWritesAgainAndNobodyAnswers();
   });
 
-  it('answers again after the chat is resolved and the customer writes back', async () => {
+  it('answers again once someone turns it back on, ignoring earlier replies by a person', async () => {
     const id = await chatStarted();
-    const actions = app.get<ConversationActionsPort>(
-      WHATSAPP_TOKENS.ConversationActions
-    );
     await app
       .get<ReplyToConversationPort>(WHATSAPP_TOKENS.ReplyToConversation)
       .execute({
@@ -457,43 +454,46 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
         body: 'Listo, ya te atendí',
         sentBy: '11111111-1111-1111-1111-111111111111',
       });
-    await actions.pauseAssistant(id, '11111111-1111-1111-1111-111111111111');
-    await actions.resolve(id);
-    sendText.mockClear();
+    expect(await conversation()).toMatchObject({
+      assistantPausedBy: '11111111-1111-1111-1111-111111111111',
+    });
     now = new Date((CUSTOMER_SENT_AT + 600) * 1000);
+    await app
+      .get<ConversationActionsPort>(WHATSAPP_TOKENS.ConversationActions)
+      .setAssistantEnabled(id, true, '11111111-1111-1111-1111-111111111111');
+    sendText.mockClear();
 
-    await receive(textMessage('otra pregunta', 'wamid.C', 300));
+    await receive(textMessage('otra pregunta', 'wamid.C', 900));
 
     await vi.waitFor(() => expect(reply).toHaveBeenCalledTimes(1));
     await vi.waitFor(() =>
       expect(sendText).toHaveBeenCalledWith('584140000001', ANSWER_TEXT)
     );
-    expect(await conversation()).toMatchObject({
-      status: 'open',
-      assistantPausedAt: null,
-    });
   });
 
-  it('stays silent if a person wrote in the resolved chat before the customer came back', async () => {
-    const id = await chatStarted();
+  it('turning it back on clears the "Necesita asesor" mark', async () => {
+    await turnOn();
+    reply.mockResolvedValueOnce({
+      ...REPLY,
+      kind: 'handoff',
+      reason: 'pricing',
+    });
+    await receive(textMessage('¿cuánto cuesta?', 'wamid.A'));
+    await waitForRun();
+
     await app
       .get<ConversationActionsPort>(WHATSAPP_TOKENS.ConversationActions)
-      .resolve(id);
-    now = new Date((CUSTOMER_SENT_AT + 200) * 1000);
-    await app
-      .get<ReplyToConversationPort>(WHATSAPP_TOKENS.ReplyToConversation)
-      .execute({
-        conversationId: id,
-        body: '¿Pudiste resolver lo de ayer?',
-        sentBy: '11111111-1111-1111-1111-111111111111',
-      });
-    sendText.mockClear();
+      .setAssistantEnabled(
+        (await conversation()).id,
+        true,
+        '11111111-1111-1111-1111-111111111111'
+      );
 
-    await receive(textMessage('sí, gracias', 'wamid.C', 300));
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    expect(reply).not.toHaveBeenCalled();
-    expect(sendText).not.toHaveBeenCalled();
+    expect(await conversation()).toMatchObject({
+      handoffRequestedAt: null,
+      handoffReason: null,
+      assistantPausedAt: null,
+    });
   });
 
   it('does not answer outside the 24 h window', async () => {

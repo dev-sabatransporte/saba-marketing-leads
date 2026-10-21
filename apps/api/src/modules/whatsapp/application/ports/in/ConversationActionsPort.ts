@@ -1,6 +1,11 @@
 export interface ConversationActionsPort {
-  /** Throws `ConversationNotFoundException`. */
-  pauseAssistant(conversationId: string, pausedBy: string): Promise<void>;
-  /** Throws `ConversationNotFoundException`. */
-  resolve(conversationId: string): Promise<void>;
+  /**
+   * Turns the assistant on or off in one chat. Throws
+   * `ConversationNotFoundException`.
+   */
+  setAssistantEnabled(
+    conversationId: string,
+    enabled: boolean,
+    by: string
+  ): Promise<void>;
 }

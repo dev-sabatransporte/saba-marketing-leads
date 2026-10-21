@@ -27,7 +27,10 @@ function toConversation(c: ConversationSummary): TConversationSummary {
     lastMessageAt: c.lastMessageAt?.toISOString() ?? null,
     lastMessagePreview: c.lastMessagePreview,
     needsAgent: c.handoffRequestedAt !== null,
-    assistantPaused: c.assistantPausedAt !== null,
+    assistantEnabled:
+      c.assistantPausedAt === null &&
+      c.handoffRequestedAt === null &&
+      c.assignedTo === null,
     windowExpiresAt: windowExpiresAt(c.lastInboundAt)?.toISOString() ?? null,
   };
 }

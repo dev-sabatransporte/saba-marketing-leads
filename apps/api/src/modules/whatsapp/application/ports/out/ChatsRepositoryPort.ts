@@ -26,13 +26,13 @@ export interface ChatsRepositoryPort {
   ): Promise<void>;
   markAsRead(conversationId: string): Promise<boolean>;
   /** `false` if the conversation does not exist. */
-  pauseAssistant(
+  turnAssistantOff(
     conversationId: string,
-    pausedBy: string,
+    by: string,
     at: Date
   ): Promise<boolean>;
-  /** `false` if the conversation does not exist. */
-  resolve(conversationId: string, at: Date): Promise<boolean>;
+  /** Clears the off switch, the handoff mark and the assignment. `false` if it does not exist. */
+  turnAssistantOn(conversationId: string, at: Date): Promise<boolean>;
   /** A message from the panel or the phone since the chat was (re)opened. */
   personRepliedSinceOpened(conversationId: string): Promise<boolean>;
   /** Marks the chat "Necesita asesor"; no-op if it already is. */

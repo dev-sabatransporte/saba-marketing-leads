@@ -28,8 +28,8 @@ export const conversationSummarySchema = z.object({
   lastMessagePreview: z.string().nullable(),
   /** The assistant handed it to a person and nobody has picked it up yet. */
   needsAgent: z.boolean(),
-  /** A person paused the assistant in this chat until it is resolved. */
-  assistantPaused: z.boolean(),
+  /** Whether the assistant answers in this chat (off after a person replies or a handoff). */
+  assistantEnabled: z.boolean(),
   /** Until when free text replies are possible; `null` if the customer never wrote. */
   windowExpiresAt: z.string().nullable(),
 });
@@ -80,3 +80,7 @@ export const sendMessageSchema = z.object({
     ),
 });
 export type TSendMessage = z.infer<typeof sendMessageSchema>;
+
+/** Turns the assistant on or off in one conversation. */
+export const assistantSwitchSchema = z.object({ enabled: z.boolean() });
+export type TAssistantSwitch = z.infer<typeof assistantSwitchSchema>;

@@ -18,8 +18,8 @@ export interface Conversation {
   lastMessageAt: Date | null;
   lastMessagePreview: string | null;
   needsAgent: boolean;
-  /** A person paused the assistant here until the chat is resolved. */
-  assistantPaused: boolean;
+  /** Whether the assistant answers here (off after a person replies or a handoff). */
+  assistantEnabled: boolean;
   windowExpiresAt: Date | null;
 }
 
