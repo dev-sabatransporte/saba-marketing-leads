@@ -1,0 +1,135 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ModelUnavailableError } from '../../modules/assistant/domain/AssistantErrors';
+import { AnthropicAssistantModel } from '../../modules/assistant/infrastructure/external/AnthropicAssistantModel';
+
+const CONFIG = { anthropicApiKey: 'sk-test', model: 'claude-sonnet-5-5' };
+const INPUT = {
+  instructions: 'Eres el asistente virtual de Saba.',
+  turns: [{ role: 'user' as const, content: '¿Dónde queda Catia?' }],
+};
+
+function message(overrides: Record<string, unknown> = {}): Response {
+  return new Response(
+    JSON.stringify({
+      id: 'msg_1',
+      type: 'message',
+      role: 'assistant',
+      model: 'claude-sonnet-5-5',
+      content: [{ type: 'text', text: 'Queda en la Av. Sucre.' }],
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      usage: {
+        input_tokens: 30,
+        output_tokens: 12,
+        cache_read_input_tokens: 800,
+        cache_creation_input_tokens: 0,
+      },
+      ...overrides,
+    }),
+    { status: 200, headers: { 'content-type': 'application/json' } }
+  );
+}
+
+function stubFetch(response: Response) {
+  const fetchMock = vi.fn(async () => response);
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
+
+async function sentRequest(fetchMock: ReturnType<typeof stubFetch>) {
+  const [url, init] = fetchMock.mock.calls[0] as unknown as [
+    string,
+    RequestInit,
+  ];
+  return {
+    url: String(url),
+    headers: new Headers(init.headers),
+    body: JSON.parse(String(init.body)) as Record<string, unknown>,
+  };
+}
+
+describe('AnthropicAssistantModel', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('asks with its own key, low effort and the instructions cached', async () => {
+    const fetchMock = stubFetch(message());
+
+    await new AnthropicAssistantModel(CONFIG).reply(INPUT);
+
+    const { url, headers, body } = await sentRequest(fetchMock);
+    expect(url).toBe('https://api.anthropic.com/v1/messages');
+    expect(headers.get('x-api-key')).toBe('sk-test');
+    expect(body).toMatchObject({
+      model: 'claude-sonnet-5-5',
+      system: [
+        {
+          type: 'text',
+          text: 'Eres el asistente virtual de Saba.',
+          cache_control: { type: 'ephemeral' },
+        },
+      ],
+      messages: [{ role: 'user', content: '¿Dónde queda Catia?' }],
+      output_config: { effort: 'low' },
+    });
+  });
+
+  it('returns the text, the model and the tokens', async () => {
+    stubFetch(message());
+
+    expect(await new AnthropicAssistantModel(CONFIG).reply(INPUT)).toEqual({
+      text: 'Queda en la Av. Sucre.',
+      model: 'claude-sonnet-5-5',
+      usage: {
+        inputTokens: 30,
+        outputTokens: 12,
+        cacheReadTokens: 800,
+        cacheWriteTokens: 0,
+      },
+    });
+  });
+
+  it('fails on a refusal or an empty reply', async () => {
+    stubFetch(message({ stop_reason: 'refusal', content: [] }));
+    await expect(
+      new AnthropicAssistantModel(CONFIG).reply(INPUT)
+    ).rejects.toMatchObject({ reason: 'refusal' });
+
+    stubFetch(message({ content: [{ type: 'text', text: '  ' }] }));
+    await expect(
+      new AnthropicAssistantModel(CONFIG).reply(INPUT)
+    ).rejects.toMatchObject({ reason: 'empty' });
+  });
+
+  it('fails on an API error without leaking it as something else', async () => {
+    stubFetch(
+      new Response(
+        JSON.stringify({
+          type: 'error',
+          error: { type: 'authentication_error', message: 'invalid x-api-key' },
+        }),
+        { status: 401, headers: { 'content-type': 'application/json' } }
+      )
+    );
+
+    await expect(
+      new AnthropicAssistantModel(CONFIG).reply(INPUT)
+    ).rejects.toMatchObject({ reason: 'api_error' });
+  });
+
+  it('does not call Anthropic without its key', async () => {
+    const fetchMock = stubFetch(message());
+
+    const error = await new AnthropicAssistantModel({
+      ...CONFIG,
+      anthropicApiKey: null,
+    })
+      .reply(INPUT)
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ModelUnavailableError);
+    expect(error).toMatchObject({ reason: 'not_configured' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
