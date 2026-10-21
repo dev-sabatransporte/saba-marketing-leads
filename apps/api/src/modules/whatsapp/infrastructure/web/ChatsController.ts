@@ -35,6 +35,7 @@ import { createZodDto } from '../../../../shared/utils/createZodDto';
 import type { AuthenticatedUser } from '../../../auth/domain/AuthSession';
 import { InvalidSessionException } from '../../../auth/domain/exceptions/InvalidSessionException';
 import { CurrentUser } from '../../../auth/infrastructure/web/CurrentUser';
+import type { ConversationActionsPort } from '../../application/ports/in/ConversationActionsPort';
 import type { GetSabaCustomerPort } from '../../application/ports/in/GetSabaCustomerPort';
 import type { ListConversationsPort } from '../../application/ports/in/ListConversationsPort';
 import type { ListMessagesPort } from '../../application/ports/in/ListMessagesPort';
@@ -66,6 +67,8 @@ export class ChatsController {
     private readonly reply: ReplyToConversationPort,
     @Inject(WHATSAPP_TOKENS.MarkAsRead)
     private readonly markAsRead: MarkAsReadPort,
+    @Inject(WHATSAPP_TOKENS.ConversationActions)
+    private readonly actions: ConversationActionsPort,
     @Inject(WHATSAPP_TOKENS.SendTypingIndicator)
     private readonly sendTypingIndicator: SendTypingIndicatorPort,
     @Inject(WHATSAPP_TOKENS.GetSabaCustomer)
@@ -118,6 +121,35 @@ export class ChatsController {
   @ZodApiResponse(HttpStatus.OK, emptyResponseSchema)
   async read(@Param('id', ParseUUIDPipe) id: string): Promise<TEmptyResponse> {
     await this.markAsRead.execute(id);
+    return { success: true, data: null };
+  }
+
+  @Post(':id/assistant/pause')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Pausa el asistente en esta conversación hasta que se resuelva',
+  })
+  @ZodApiResponse(HttpStatus.OK, emptyResponseSchema)
+  async pauseAssistant(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser
+  ): Promise<TEmptyResponse> {
+    await this.actions.pauseAssistant(id, user.id);
+    return { success: true, data: null };
+  }
+
+  @Post(':id/resolve')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Marca la conversación como resuelta',
+    description:
+      'Quita la pausa del asistente y la marca "Necesita asesor": cuando el cliente vuelva a escribir, el asistente responde de nuevo.',
+  })
+  @ZodApiResponse(HttpStatus.OK, emptyResponseSchema)
+  async resolve(
+    @Param('id', ParseUUIDPipe) id: string
+  ): Promise<TEmptyResponse> {
+    await this.actions.resolve(id);
     return { success: true, data: null };
   }
 

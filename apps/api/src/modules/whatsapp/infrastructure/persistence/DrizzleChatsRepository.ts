@@ -1,5 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import {
+  and,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  sql,
+} from 'drizzle-orm';
 import {
   type ApiDb,
   DRIZZLE_CLIENT,
@@ -29,6 +38,8 @@ const conversationColumns = {
   profileName: whatsappContacts.profileName,
   sabaProfileId: whatsappContacts.sabaProfileId,
   handoffRequestedAt: whatsappConversations.handoffRequestedAt,
+  assignedTo: whatsappConversations.assignedTo,
+  assistantPausedAt: whatsappConversations.assistantPausedAt,
 };
 
 const messageColumns = {
@@ -51,6 +62,8 @@ function toConversation(row: {
   lastMessagePreview: string | null;
   lastInboundAt: Date | null;
   handoffRequestedAt: Date | null;
+  assignedTo: string | null;
+  assistantPausedAt: Date | null;
   contactId: string;
   waId: string | null;
   profileName: string | null;
@@ -70,6 +83,8 @@ function toConversation(row: {
     lastMessagePreview: row.lastMessagePreview,
     lastInboundAt: row.lastInboundAt,
     handoffRequestedAt: row.handoffRequestedAt,
+    assignedTo: row.assignedTo,
+    assistantPausedAt: row.assistantPausedAt,
   };
 }
 
@@ -224,6 +239,59 @@ export class DrizzleChatsRepository implements ChatsRepositoryPort {
           isNull(whatsappConversations.handoffRequestedAt)
         )
       );
+  }
+
+  async pauseAssistant(
+    conversationId: string,
+    pausedBy: string,
+    at: Date
+  ): Promise<boolean> {
+    const updated = await this.db
+      .update(whatsappConversations)
+      .set({
+        assistantPausedAt: at,
+        assistantPausedBy: pausedBy,
+        updatedAt: at,
+      })
+      .where(eq(whatsappConversations.id, conversationId))
+      .returning({ id: whatsappConversations.id });
+    return updated.length > 0;
+  }
+
+  /** Done with it: the pause and the handoff mark go, the assistant may answer again. */
+  async resolve(conversationId: string, at: Date): Promise<boolean> {
+    const updated = await this.db
+      .update(whatsappConversations)
+      .set({
+        status: 'resolved',
+        assistantPausedAt: null,
+        assistantPausedBy: null,
+        handoffRequestedAt: null,
+        handoffReason: null,
+        updatedAt: at,
+      })
+      .where(eq(whatsappConversations.id, conversationId))
+      .returning({ id: whatsappConversations.id });
+    return updated.length > 0;
+  }
+
+  async personRepliedSinceOpened(conversationId: string): Promise<boolean> {
+    const [reply] = await this.db
+      .select({ id: whatsappMessages.id })
+      .from(whatsappMessages)
+      .innerJoin(
+        whatsappConversations,
+        eq(whatsappConversations.id, whatsappMessages.conversationId)
+      )
+      .where(
+        and(
+          eq(whatsappMessages.conversationId, conversationId),
+          inArray(whatsappMessages.source, ['system', 'phone']),
+          gte(whatsappMessages.waTimestamp, whatsappConversations.openedAt)
+        )
+      )
+      .limit(1);
+    return reply !== undefined;
   }
 
   async markAsRead(conversationId: string): Promise<boolean> {

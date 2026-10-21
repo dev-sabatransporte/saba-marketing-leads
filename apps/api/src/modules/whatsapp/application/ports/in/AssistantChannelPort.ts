@@ -6,6 +6,12 @@ export interface AssistantChat {
   lastInboundAt: Date | null;
   /** Set while the chat waits for a person: the assistant stays silent. */
   handoffRequestedAt: Date | null;
+  /** Someone took the chat. */
+  assigned: boolean;
+  /** A person wrote from the panel or the phone since the chat was (re)opened. */
+  personReplied: boolean;
+  /** A person paused the assistant in this chat. */
+  assistantPaused: boolean;
   /** The most recent ones, in chronological order. */
   messages: ChatMessage[];
 }

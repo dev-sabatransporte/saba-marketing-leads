@@ -343,6 +343,68 @@ describe('WhatsApp chats (API)', () => {
     expect(sendText).not.toHaveBeenCalled();
   });
 
+  it('pauses the assistant in a chat, recording who and when', async () => {
+    const id = await createChat({ lastInboundAt: ONE_HOUR_AGO });
+
+    const res = await request(app.getHttpServer()).post(
+      `/whatsapp/conversations/${id}/assistant/pause`
+    );
+
+    expect(res.status).toBe(200);
+    const [conversation] = await getTestDb()
+      .select()
+      .from(whatsappConversations)
+      .where(eq(whatsappConversations.id, id));
+    expect(conversation).toMatchObject({
+      assistantPausedAt: NOW,
+      assistantPausedBy: AGENT.id,
+    });
+    const list = await request(app.getHttpServer()).get(
+      '/whatsapp/conversations'
+    );
+    expect(list.body.data[0]).toMatchObject({ assistantPaused: true });
+  });
+
+  it('resolves a chat: clears the pause and the handoff mark', async () => {
+    const id = await createChat({ lastInboundAt: ONE_HOUR_AGO });
+    await getTestDb()
+      .update(whatsappConversations)
+      .set({
+        assistantPausedAt: ONE_HOUR_AGO,
+        assistantPausedBy: AGENT.id,
+        handoffRequestedAt: ONE_HOUR_AGO,
+        handoffReason: 'pricing',
+      })
+      .where(eq(whatsappConversations.id, id));
+
+    const res = await request(app.getHttpServer()).post(
+      `/whatsapp/conversations/${id}/resolve`
+    );
+
+    expect(res.status).toBe(200);
+    const [conversation] = await getTestDb()
+      .select()
+      .from(whatsappConversations)
+      .where(eq(whatsappConversations.id, id));
+    expect(conversation).toMatchObject({
+      status: 'resolved',
+      assistantPausedAt: null,
+      assistantPausedBy: null,
+      handoffRequestedAt: null,
+      handoffReason: null,
+    });
+  });
+
+  it('answers 404 when pausing or resolving a chat that does not exist', async () => {
+    const missing = '00000000-0000-4000-8000-000000000000';
+    for (const action of ['assistant/pause', 'resolve']) {
+      const res = await request(app.getHttpServer()).post(
+        `/whatsapp/conversations/${missing}/${action}`
+      );
+      expect(res.status).toBe(404);
+    }
+  });
+
   it('marks the conversation as read', async () => {
     const id = await createChat({
       lastInboundAt: ONE_HOUR_AGO,

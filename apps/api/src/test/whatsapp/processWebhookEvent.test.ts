@@ -209,6 +209,8 @@ describe('ProcesarWebhookEventoUseCase (contra Postgres)', () => {
     const [conversation] = await db().select().from(whatsappConversations);
     expect(conversation).toMatchObject({
       status: 'open',
+      // Reopened: a person's reply before this no longer counts as attending it.
+      openedAt: new Date(T0 * 1000),
       unreadCount: 1,
       lastMessagePreview: 'último',
       lastMessageAt: new Date((T0 + 60) * 1000),

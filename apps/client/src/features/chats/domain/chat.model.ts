@@ -18,6 +18,8 @@ export interface Conversation {
   lastMessageAt: Date | null;
   lastMessagePreview: string | null;
   needsAgent: boolean;
+  /** A person paused the assistant here until the chat is resolved. */
+  assistantPaused: boolean;
   windowExpiresAt: Date | null;
 }
 

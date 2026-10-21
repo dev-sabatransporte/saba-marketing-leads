@@ -43,6 +43,7 @@ async function createChat(lastInboundAt: Date): Promise<string> {
     .insert(whatsappConversations)
     .values({
       contactId: contact.id,
+      openedAt: lastInboundAt,
       lastInboundAt,
       lastMessageAt: lastInboundAt,
     })
@@ -126,6 +127,57 @@ describe('WhatsAppAssistantChannel (against Postgres)', () => {
     });
     expect(await channel().read(conversationId, 20)).toMatchObject({
       handoffRequestedAt: NOW,
+    });
+  });
+
+  it('tells whether a person is attending: assigned, replied since it opened or paused', async () => {
+    const conversationId = await createChat(TEN_MINUTES_AGO);
+    expect(await channel().read(conversationId, 20)).toMatchObject({
+      assigned: false,
+      personReplied: false,
+      assistantPaused: false,
+    });
+
+    await getTestDb().insert(whatsappMessages).values({
+      conversationId,
+      direction: 'outbound',
+      source: 'phone',
+      type: 'text',
+      body: 'te escribo desde el celular',
+      waTimestamp: NOW,
+    });
+    await getTestDb()
+      .update(whatsappConversations)
+      .set({
+        assignedTo: '11111111-1111-1111-1111-111111111111',
+        assistantPausedAt: NOW,
+      })
+      .where(eq(whatsappConversations.id, conversationId));
+
+    expect(await channel().read(conversationId, 20)).toMatchObject({
+      assigned: true,
+      personReplied: true,
+      assistantPaused: true,
+    });
+  });
+
+  it('forgets a person reply from before the chat was reopened', async () => {
+    const conversationId = await createChat(TEN_MINUTES_AGO);
+    await getTestDb().insert(whatsappMessages).values({
+      conversationId,
+      direction: 'outbound',
+      source: 'system',
+      type: 'text',
+      body: 'listo, ya te atendí',
+      waTimestamp: TEN_MINUTES_AGO,
+    });
+    await getTestDb()
+      .update(whatsappConversations)
+      .set({ openedAt: NOW })
+      .where(eq(whatsappConversations.id, conversationId));
+
+    expect(await channel().read(conversationId, 20)).toMatchObject({
+      personReplied: false,
     });
   });
 

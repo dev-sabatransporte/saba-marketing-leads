@@ -66,6 +66,14 @@ export const whatsappConversations = pgTable(
       withTimezone: true,
     }),
     handoffReason: text('handoff_reason'),
+    // When it was opened or last reopened by the customer: a person's reply
+    // from before that no longer means someone is attending the chat.
+    openedAt: timestamp('opened_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    // A person paused the assistant in this chat; cleared when it is resolved.
+    assistantPausedAt: timestamp('assistant_paused_at', { withTimezone: true }),
+    assistantPausedBy: uuid('assistant_paused_by'),
     lastMessageAt: timestamp('last_message_at', { withTimezone: true }),
     // The 24 h window is computed from here: only live inbound messages move it.
     lastInboundAt: timestamp('last_inbound_at', { withTimezone: true }),

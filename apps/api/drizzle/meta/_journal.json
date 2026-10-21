@@ -29,6 +29,13 @@
       "when": 1792609656288,
       "tag": "0003_conversation_handoff",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792610926534,
+      "tag": "0004_conversation_attention",
+      "breakpoints": true
     }
   ]
 }

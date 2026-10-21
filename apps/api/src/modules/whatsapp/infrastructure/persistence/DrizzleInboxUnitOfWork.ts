@@ -151,6 +151,7 @@ class DrizzleInboxScope implements InboxTxScope {
             }
           : {}),
         unreadCount: sql`${c.unreadCount} + 1`,
+        openedAt: sql`case when ${c.status} = 'resolved' then ${moment} else ${c.openedAt} end`,
         status: 'open',
         updatedAt: new Date(),
       })

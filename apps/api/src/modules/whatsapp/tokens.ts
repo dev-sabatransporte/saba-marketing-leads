@@ -18,6 +18,7 @@ export const WHATSAPP_TOKENS = {
   ListMessages: Symbol('ListMessagesPort'),
   ReplyToConversation: Symbol('ReplyToConversationPort'),
   MarkAsRead: Symbol('MarkAsReadPort'),
+  ConversationActions: Symbol('ConversationActionsPort'),
   GetMedia: Symbol('GetMediaPort'),
   SendTypingIndicator: Symbol('SendTypingIndicatorPort'),
   GetSabaCustomer: Symbol('GetSabaCustomerPort'),

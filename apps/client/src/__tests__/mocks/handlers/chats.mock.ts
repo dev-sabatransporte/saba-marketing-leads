@@ -26,6 +26,7 @@ export function conversationsFixture(): TConversationSummary[] {
       lastMessageAt: new Date(now - HOUR).toISOString(),
       lastMessagePreview: '¿Tienen la moto en rojo?',
       needsAgent: false,
+      assistantPaused: false,
       windowExpiresAt: new Date(now + 23 * HOUR).toISOString(),
     },
     {
@@ -41,6 +42,7 @@ export function conversationsFixture(): TConversationSummary[] {
       lastMessageAt: new Date(now - 48 * HOUR).toISOString(),
       lastMessagePreview: 'Gracias',
       needsAgent: false,
+      assistantPaused: false,
       windowExpiresAt: new Date(now - 24 * HOUR).toISOString(),
     },
   ];

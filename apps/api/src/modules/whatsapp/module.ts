@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { SabaCustomersModule } from '../sabaCustomers/module';
 import { SABA_CUSTOMERS_TOKENS } from '../sabaCustomers/tokens';
+import { ConversationActionsUseCase } from './application/use-cases/ConversationActionsUseCase';
 import { GetMediaUseCase } from './application/use-cases/GetMediaUseCase';
 import { GetSabaCustomerUseCase } from './application/use-cases/GetSabaCustomerUseCase';
 import { ListConversationsUseCase } from './application/use-cases/ListConversationsUseCase';
@@ -115,6 +116,11 @@ import { WHATSAPP_TOKENS } from './tokens';
     GetMediaUseCase,
     { provide: WHATSAPP_TOKENS.GetMedia, useExisting: GetMediaUseCase },
     MarkAsReadUseCase,
+    ConversationActionsUseCase,
+    {
+      provide: WHATSAPP_TOKENS.ConversationActions,
+      useExisting: ConversationActionsUseCase,
+    },
     { provide: WHATSAPP_TOKENS.MarkAsRead, useExisting: MarkAsReadUseCase },
     SendTypingIndicatorUseCase,
     {

@@ -25,6 +25,16 @@ export interface ChatsRepositoryPort {
     detail: string
   ): Promise<void>;
   markAsRead(conversationId: string): Promise<boolean>;
+  /** `false` if the conversation does not exist. */
+  pauseAssistant(
+    conversationId: string,
+    pausedBy: string,
+    at: Date
+  ): Promise<boolean>;
+  /** `false` if the conversation does not exist. */
+  resolve(conversationId: string, at: Date): Promise<boolean>;
+  /** A message from the panel or the phone since the chat was (re)opened. */
+  personRepliedSinceOpened(conversationId: string): Promise<boolean>;
   /** Marks the chat "Necesita asesor"; no-op if it already is. */
   requestHandoff(
     conversationId: string,

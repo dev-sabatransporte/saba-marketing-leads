@@ -17,6 +17,9 @@ export interface ConversationSummary {
   lastInboundAt: Date | null;
   /** When the assistant handed the chat to a person; `null` if it did not. */
   handoffRequestedAt: Date | null;
+  /** A Saba `profiles` id; `null` while nobody took the chat. */
+  assignedTo: string | null;
+  assistantPausedAt: Date | null;
 }
 
 export interface ChatMessage {

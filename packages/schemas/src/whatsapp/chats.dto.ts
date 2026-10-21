@@ -28,6 +28,8 @@ export const conversationSummarySchema = z.object({
   lastMessagePreview: z.string().nullable(),
   /** The assistant handed it to a person and nobody has picked it up yet. */
   needsAgent: z.boolean(),
+  /** A person paused the assistant in this chat until it is resolved. */
+  assistantPaused: z.boolean(),
   /** Until when free text replies are possible; `null` if the customer never wrote. */
   windowExpiresAt: z.string().nullable(),
 });
