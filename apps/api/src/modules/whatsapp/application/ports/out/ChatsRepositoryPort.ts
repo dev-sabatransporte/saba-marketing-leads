@@ -1,11 +1,15 @@
 import type { ChatMessage, ConversationSummary } from '../../../domain/Chats';
 
-export interface NewOutboundMessage {
+/** Who writes: a person from the panel, or the assistant (no person behind it). */
+export type OutboundSender =
+  | { source: 'system'; sentBy: string }
+  | { source: 'assistant'; sentBy: null };
+
+export type NewOutboundMessage = OutboundSender & {
   conversationId: string;
   body: string;
-  sentBy: string;
   waTimestamp: Date;
-}
+};
 
 export interface ChatsRepositoryPort {
   listConversations(limit: number): Promise<ConversationSummary[]>;

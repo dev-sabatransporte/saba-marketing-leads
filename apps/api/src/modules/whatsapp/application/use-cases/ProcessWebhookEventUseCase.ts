@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { InvalidWebhookPayloadException } from '../../domain/exceptions/InvalidWebhookPayloadException';
 import type { StoredInboundMessage } from '../../domain/events/InboundMessageStored';
+import { InvalidWebhookPayloadException } from '../../domain/exceptions/InvalidWebhookPayloadException';
 import { type InboxAction, statusesThatAdvanceTo } from '../../domain/Inbox';
 import { parseWebhook } from '../../domain/parseWebhook';
 import { WHATSAPP_TOKENS } from '../../tokens';

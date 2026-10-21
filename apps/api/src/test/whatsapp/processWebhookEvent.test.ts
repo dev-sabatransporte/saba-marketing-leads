@@ -5,8 +5,8 @@ import {
   MAX_ATTEMPTS,
   ReprocessPendingUseCase,
 } from '../../modules/whatsapp/application/use-cases/ReprocessPendingUseCase';
-import { extractChanges } from '../../modules/whatsapp/domain/WebhookChange';
 import type { StoredInboundMessage } from '../../modules/whatsapp/domain/events/InboundMessageStored';
+import { extractChanges } from '../../modules/whatsapp/domain/WebhookChange';
 import { DrizzleInboxUnitOfWork } from '../../modules/whatsapp/infrastructure/persistence/DrizzleInboxUnitOfWork';
 import { DrizzleWebhookEventRepository } from '../../modules/whatsapp/infrastructure/persistence/DrizzleWebhookEventRepository';
 import {
@@ -139,7 +139,9 @@ describe('ProcesarWebhookEventoUseCase (contra Postgres)', () => {
   });
 
   it('announces nothing if the event fails', async () => {
-    const eventId = await saveEvent('messages', { messages: 'no es una lista' });
+    const eventId = await saveEvent('messages', {
+      messages: 'no es una lista',
+    });
     expect(await process().execute(eventId)).toBe('failed');
     expect(announced).toEqual([]);
   });

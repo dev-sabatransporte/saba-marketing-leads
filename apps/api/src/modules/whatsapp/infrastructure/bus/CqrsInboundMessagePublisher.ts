@@ -8,7 +8,9 @@ import {
 } from '../../domain/events/InboundMessageStored';
 
 @Injectable()
-export class CqrsInboundMessagePublisher implements InboundMessagePublisherPort {
+export class CqrsInboundMessagePublisher
+  implements InboundMessagePublisherPort
+{
   constructor(
     private readonly eventBus: EventBus,
     private readonly logger: StructuredLogger

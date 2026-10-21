@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { SabaCustomersModule } from '../sabaCustomers/module';
 import { SABA_CUSTOMERS_TOKENS } from '../sabaCustomers/tokens';
+import { AssistantChannel } from './application/use-cases/AssistantChannel';
 import { GetMediaUseCase } from './application/use-cases/GetMediaUseCase';
 import { GetSabaCustomerUseCase } from './application/use-cases/GetSabaCustomerUseCase';
 import { ListConversationsUseCase } from './application/use-cases/ListConversationsUseCase';
@@ -121,6 +122,13 @@ import { WHATSAPP_TOKENS } from './tokens';
       useExisting: SendTypingIndicatorUseCase,
     },
     WebhookReprocessorService,
+    AssistantChannel,
+    {
+      provide: WHATSAPP_TOKENS.AssistantChannel,
+      useExisting: AssistantChannel,
+    },
   ],
+  // The only port other modules get: the assistant reads and writes chats through it.
+  exports: [WHATSAPP_TOKENS.AssistantChannel],
 })
 export class WhatsAppModule {}

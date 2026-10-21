@@ -21,4 +21,5 @@ export const WHATSAPP_TOKENS = {
   GetMedia: Symbol('GetMediaPort'),
   SendTypingIndicator: Symbol('SendTypingIndicatorPort'),
   GetSabaCustomer: Symbol('GetSabaCustomerPort'),
+  AssistantChannel: Symbol('AssistantChannelPort'),
 } as const;

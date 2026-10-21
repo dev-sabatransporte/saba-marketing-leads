@@ -130,7 +130,7 @@ export class DrizzleChatsRepository implements ChatsRepositoryPort {
         .values({
           conversationId: message.conversationId,
           direction: 'outbound',
-          source: 'system',
+          source: message.source,
           type: 'text',
           body: message.body,
           sentBy: message.sentBy,

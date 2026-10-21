@@ -12,7 +12,10 @@ import {
 import { sendException } from '../../domain/sendException';
 import { WHATSAPP_TOKENS } from '../../tokens';
 import type { ReplyToConversationPort } from '../ports/in/ReplyToConversationPort';
-import type { ChatsRepositoryPort } from '../ports/out/ChatsRepositoryPort';
+import type {
+  ChatsRepositoryPort,
+  OutboundSender,
+} from '../ports/out/ChatsRepositoryPort';
 import type { ClockPort } from '../ports/out/ClockPort';
 import type { WhatsAppCloudPort } from '../ports/out/WhatsAppCloudPort';
 
@@ -39,6 +42,25 @@ export class ReplyToConversationUseCase implements ReplyToConversationPort {
     body: string;
     sentBy: string;
   }): Promise<ChatMessage> {
+    return this.send(conversationId, body, { source: 'system', sentBy });
+  }
+
+  /** Same rules as a panel reply (24 h window, phone required), without a person. */
+  async sendAsAssistant(
+    conversationId: string,
+    body: string
+  ): Promise<ChatMessage> {
+    return this.send(conversationId, body, {
+      source: 'assistant',
+      sentBy: null,
+    });
+  }
+
+  private async send(
+    conversationId: string,
+    body: string,
+    sender: OutboundSender
+  ): Promise<ChatMessage> {
     const conversation = await this.chats.getConversation(conversationId);
     if (!conversation) throw new ConversationNotFoundException();
 
@@ -52,9 +74,9 @@ export class ReplyToConversationUseCase implements ReplyToConversationPort {
     if (!phone) throw new ContactWithoutPhoneException();
 
     const pending = await this.chats.registerOutbound({
+      ...sender,
       conversationId,
       body,
-      sentBy,
       waTimestamp: now,
     });
 
