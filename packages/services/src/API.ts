@@ -1,3 +1,4 @@
+import { AssistantService } from './components/assistant';
 import { AuthService } from './components/auth';
 import { HealthService } from './components/health';
 import { LeadsService } from './components/leads';
@@ -21,6 +22,7 @@ export interface APIConfig {
  * Versioned API service interface
  */
 export interface APIService {
+  assistant: AssistantService;
   auth: AuthService;
   health: HealthService;
   leads: LeadsService;
@@ -45,6 +47,7 @@ export class API {
 
     // Wire services with dependencies
     this.v1 = Object.freeze({
+      assistant: new AssistantService(this.httpClient),
       auth: new AuthService(this.httpClient),
       health: new HealthService(this.httpClient),
       leads: new LeadsService(this.httpClient),
