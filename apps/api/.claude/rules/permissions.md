@@ -1,6 +1,6 @@
 # Permisos
 
-Los permisos los **otorga Saba** y los **hace cumplir esta API**. Hoy hay dos: `marketing:access`, que Saba deriva de `profiles.has_marketing_access` (más un rol de staff), y `assistant:manage`, que además exige `profiles.can_manage_assistant` y solo controla el interruptor global del asistente de WhatsApp. El catálogo vive en `packages/schemas` (`PERMISSIONS`); un permiso que Saba mande y este repo no conozca se ignora.
+Los permisos los **otorga Saba** y los **hace cumplir esta API**. Hoy hay dos: `marketing:access`, que Saba deriva de `profiles.has_marketing_access` (más un rol de staff), y `assistant:manage`, que además exige `profiles.can_manage_assistant` y solo controla los ajustes globales del asistente de WhatsApp (interruptor y límites, `/assistant/settings`). El catálogo vive en `packages/schemas` (`PERMISSIONS`); un permiso que Saba mande y este repo no conozca se ignora.
 
 Nunca se decide un permiso en el frontend: la API le informa sus permisos efectivos (`GET /me`) solo para que pinte la interfaz, y no confía en lo que el cliente diga.
 
