@@ -620,6 +620,36 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
       );
     });
 
+    it('hands over for pricing when the model chooses it after finding the product', async () => {
+      await turnOn();
+      searchThen('bera sbr', { ...REPLY, kind: 'handoff', reason: 'pricing' });
+
+      await receive(textMessage('¿en cuántas cuotas me dan la bera sbr?'));
+      const run = await expectHandoff('pricing');
+
+      expect(sendText).toHaveBeenCalledTimes(1);
+      expect(run.toolCalls).toEqual([
+        { tool: 'search_products', query: 'bera sbr', resultCount: 1 },
+      ]);
+    });
+
+    it('never sends an amount even without a currency sign', async () => {
+      await turnOn();
+      searchThen('bera sbr', {
+        ...REPLY,
+        text: 'La Bera SBR 150 sale en 12 cuotas de 80.',
+      });
+
+      await receive(textMessage('¿cuánto pago al mes por la bera sbr?'));
+      await expectHandoff('pricing');
+
+      expect(sendText).toHaveBeenCalledTimes(1);
+      expect(sendText).not.toHaveBeenCalledWith(
+        '584140000001',
+        expect.stringContaining('cuotas')
+      );
+    });
+
     it('hands over with error when Saba is down, without telling the customer why', async () => {
       await turnOn();
       searchProducts.mockRejectedValue(
