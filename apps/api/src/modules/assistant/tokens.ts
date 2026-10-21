@@ -4,6 +4,7 @@ export const ASSISTANT_TOKENS = {
   Logger: Symbol('AssistantLogger'),
   Model: Symbol('AssistantModelPort'),
   Stores: Symbol('StoresSourcePort'),
+  Products: Symbol('ProductCatalogPort'),
   Channel: Symbol('AssistantChannelPort'),
   Settings: Symbol('AssistantSettingsRepositoryPort'),
   Runs: Symbol('AssistantRunsRepositoryPort'),

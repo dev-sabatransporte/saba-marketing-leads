@@ -16,3 +16,14 @@ export class ModelUnavailableError extends Error {
     super(detail);
   }
 }
+
+/** Saba did not answer a product search: down, slow, rate-limited or the key rejected. */
+export class CatalogUnavailableError extends Error {
+  constructor(
+    /** The assistant key is missing or rejected: a person must fix it, retrying will not. */
+    readonly misconfigured: boolean,
+    detail: string
+  ) {
+    super(detail);
+  }
+}
