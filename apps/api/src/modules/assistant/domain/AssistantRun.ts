@@ -7,6 +7,13 @@ export interface TokenUsage {
   cacheWriteTokens: number;
 }
 
+/** A tool the model used in a turn; `resultCount` is `null` if Saba did not answer. */
+export interface ToolCall {
+  tool: 'search_products';
+  query: string;
+  resultCount: number | null;
+}
+
 /** One assistant turn, for reviewing how it is doing and what it costs. */
 export interface NewAssistantRun {
   conversationId: string;
@@ -17,5 +24,6 @@ export interface NewAssistantRun {
   errorDetail: string | null;
   model: string | null;
   usage: TokenUsage | null;
+  toolCalls: ToolCall[];
   latencyMs: number;
 }

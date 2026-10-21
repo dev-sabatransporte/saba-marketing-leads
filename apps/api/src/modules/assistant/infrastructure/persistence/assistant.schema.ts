@@ -4,11 +4,13 @@ import {
   check,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
   uuid,
 } from 'drizzle-orm/pg-core';
+import type { ToolCall } from '../../domain/AssistantRun';
 
 /**
  * A single row (`id = 1`): the assistant's switch and limits. Read on every
@@ -56,6 +58,8 @@ export const assistantRuns = pgTable(
     outputTokens: integer('output_tokens'),
     cacheReadTokens: integer('cache_read_tokens'),
     cacheWriteTokens: integer('cache_write_tokens'),
+    // What it searched and how many results came back, for the "¿por qué?".
+    toolCalls: jsonb('tool_calls').$type<ToolCall[]>().notNull().default([]),
     latencyMs: integer('latency_ms').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()

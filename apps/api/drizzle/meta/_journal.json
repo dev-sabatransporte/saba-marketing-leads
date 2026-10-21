@@ -36,6 +36,13 @@
       "when": 1792610926534,
       "tag": "0004_conversation_attention",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792612191838,
+      "tag": "0005_assistant_run_tool_calls",
+      "breakpoints": true
     }
   ]
 }

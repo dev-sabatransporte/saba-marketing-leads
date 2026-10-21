@@ -40,7 +40,7 @@ describe('assistant persistence (against Postgres)', () => {
     ).rejects.toThrow();
   });
 
-  it('records a turn with its messages, model, tokens and latency', async () => {
+  it('records a turn with its messages, model, tokens, tools and latency', async () => {
     const conversationId = crypto.randomUUID();
     const inboundId = crypto.randomUUID();
     const sentId = crypto.randomUUID();
@@ -59,6 +59,10 @@ describe('assistant persistence (against Postgres)', () => {
         cacheReadTokens: 900,
         cacheWriteTokens: 0,
       },
+      toolCalls: [
+        { tool: 'search_products', query: 'bera 150', resultCount: 2 },
+        { tool: 'search_products', query: 'bera', resultCount: null },
+      ],
       latencyMs: 1500,
     });
 
@@ -73,6 +77,10 @@ describe('assistant persistence (against Postgres)', () => {
       outputTokens: 40,
       cacheReadTokens: 900,
       cacheWriteTokens: 0,
+      toolCalls: [
+        { tool: 'search_products', query: 'bera 150', resultCount: 2 },
+        { tool: 'search_products', query: 'bera', resultCount: null },
+      ],
       latencyMs: 1500,
     });
   });

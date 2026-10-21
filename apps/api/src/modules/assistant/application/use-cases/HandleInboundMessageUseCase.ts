@@ -87,6 +87,7 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
         conversationId,
         inboundMessageIds: [messageId],
         latencyMs: this.clock.now().getTime() - startedAt,
+        toolCalls: [],
         ...fields,
       });
     const handOver = (

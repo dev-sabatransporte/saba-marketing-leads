@@ -1,0 +1,1 @@
+ALTER TABLE "assistant_runs" DROP COLUMN IF EXISTS "tool_calls";

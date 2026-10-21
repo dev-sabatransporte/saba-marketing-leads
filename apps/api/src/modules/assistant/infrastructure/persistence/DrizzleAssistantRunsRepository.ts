@@ -26,6 +26,7 @@ export class DrizzleAssistantRunsRepository
       outputTokens: run.usage?.outputTokens ?? null,
       cacheReadTokens: run.usage?.cacheReadTokens ?? null,
       cacheWriteTokens: run.usage?.cacheWriteTokens ?? null,
+      toolCalls: run.toolCalls,
       latencyMs: run.latencyMs,
     });
   }
