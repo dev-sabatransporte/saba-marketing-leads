@@ -262,9 +262,7 @@
         "leads_email_unique": {
           "name": "leads_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         }
       },
       "policies": {},
@@ -339,9 +337,7 @@
         "whatsapp_accounts_phone_number_id_unique": {
           "name": "whatsapp_accounts_phone_number_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "phone_number_id"
-          ]
+          "columns": ["phone_number_id"]
         }
       },
       "policies": {},
@@ -416,16 +412,12 @@
         "whatsapp_contacts_wa_id_unique": {
           "name": "whatsapp_contacts_wa_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "wa_id"
-          ]
+          "columns": ["wa_id"]
         },
         "whatsapp_contacts_user_id_unique": {
           "name": "whatsapp_contacts_user_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "user_id"
-          ]
+          "columns": ["user_id"]
         }
       },
       "policies": {},
@@ -560,12 +552,8 @@
           "name": "whatsapp_conversations_contact_id_whatsapp_contacts_id_fk",
           "tableFrom": "whatsapp_conversations",
           "tableTo": "whatsapp_contacts",
-          "columnsFrom": [
-            "contact_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["contact_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -575,9 +563,7 @@
         "whatsapp_conversations_contact_id_unique": {
           "name": "whatsapp_conversations_contact_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "contact_id"
-          ]
+          "columns": ["contact_id"]
         }
       },
       "policies": {},
@@ -726,12 +712,8 @@
           "name": "whatsapp_messages_conversation_id_whatsapp_conversations_id_fk",
           "tableFrom": "whatsapp_messages",
           "tableTo": "whatsapp_conversations",
-          "columnsFrom": [
-            "conversation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["conversation_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -741,9 +723,7 @@
         "whatsapp_messages_wamid_unique": {
           "name": "whatsapp_messages_wamid_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "wamid"
-          ]
+          "columns": ["wamid"]
         }
       },
       "policies": {},
