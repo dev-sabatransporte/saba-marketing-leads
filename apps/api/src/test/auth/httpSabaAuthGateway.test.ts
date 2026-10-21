@@ -103,6 +103,22 @@ describe('HttpSabaAuthGateway', () => {
     expect(user.permissions).toEqual(['marketing:access']);
   });
 
+  it('keeps assistant:manage when Saba grants it', async () => {
+    stubFetch(
+      reply(200, {
+        ok: true,
+        user: {
+          ...SABA_USER,
+          permissions: ['marketing:access', 'assistant:manage'],
+        },
+      })
+    );
+
+    const user = await gateway.findSessionUser('access');
+
+    expect(user.permissions).toEqual(['marketing:access', 'assistant:manage']);
+  });
+
   it('tells an expired session apart from a wrong service key', async () => {
     stubFetch(reply(401, { ok: false }));
     await expect(gateway.findSessionUser('t')).rejects.toThrow(

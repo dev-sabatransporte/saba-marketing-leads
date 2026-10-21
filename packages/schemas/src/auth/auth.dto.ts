@@ -8,11 +8,13 @@ export const staffRoleSchema = z.enum(STAFF_ROLES);
 export type TStaffRole = z.infer<typeof staffRoleSchema>;
 
 /**
- * Panel permissions, `<resource>:<action>`. Saba grants them (today
- * `marketing:access` comes from `profiles.has_marketing_access`) and the API
+ * Panel permissions, `<resource>:<action>`. Saba grants them and the API
  * enforces them; the client only uses them to render.
+ * - `marketing:access`: `profiles.has_marketing_access`.
+ * - `assistant:manage`: `profiles.can_manage_assistant` on top of panel access;
+ *   turns the WhatsApp assistant on or off.
  */
-export const PERMISSIONS = ['marketing:access'] as const;
+export const PERMISSIONS = ['marketing:access', 'assistant:manage'] as const;
 export const permissionSchema = z.enum(PERMISSIONS);
 export type TPermission = z.infer<typeof permissionSchema>;
 
