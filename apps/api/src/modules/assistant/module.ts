@@ -3,6 +3,7 @@ import { StructuredLogger } from '../../infrastructure/logging/StructuredLogger'
 import { WhatsAppModule } from '../whatsapp/module';
 import { WHATSAPP_TOKENS } from '../whatsapp/tokens';
 import { GetAssistantSettingsUseCase } from './application/use-cases/GetAssistantSettingsUseCase';
+import { GetDailyLimitStatusUseCase } from './application/use-cases/GetDailyLimitStatusUseCase';
 import { HandleInboundMessageUseCase } from './application/use-cases/HandleInboundMessageUseCase';
 import { UpdateAssistantSettingsUseCase } from './application/use-cases/UpdateAssistantSettingsUseCase';
 import { loadAssistantConfig } from './infrastructure/assistantConfig';
@@ -13,12 +14,13 @@ import { HttpSabaAssistantStores } from './infrastructure/external/HttpSabaAssis
 import { SystemClock } from './infrastructure/external/SystemClock';
 import { DrizzleAssistantRunsRepository } from './infrastructure/persistence/DrizzleAssistantRunsRepository';
 import { DrizzleAssistantSettingsRepository } from './infrastructure/persistence/DrizzleAssistantSettingsRepository';
+import { AssistantDailyLimitController } from './infrastructure/web/AssistantDailyLimitController';
 import { AssistantSettingsController } from './infrastructure/web/AssistantSettingsController';
 import { ASSISTANT_TOKENS } from './tokens';
 
 @Module({
   imports: [WhatsAppModule],
-  controllers: [AssistantSettingsController],
+  controllers: [AssistantSettingsController, AssistantDailyLimitController],
   providers: [
     {
       provide: ASSISTANT_TOKENS.Config,
@@ -59,6 +61,11 @@ import { ASSISTANT_TOKENS } from './tokens';
     {
       provide: ASSISTANT_TOKENS.UpdateSettings,
       useExisting: UpdateAssistantSettingsUseCase,
+    },
+    GetDailyLimitStatusUseCase,
+    {
+      provide: ASSISTANT_TOKENS.DailyLimitStatus,
+      useExisting: GetDailyLimitStatusUseCase,
     },
   ],
 })
