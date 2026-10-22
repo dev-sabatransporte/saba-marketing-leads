@@ -797,6 +797,24 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
       expect(await runs()).toHaveLength(3);
     });
 
+    it('answers the contact again once its replies are older than 24 h', async () => {
+      await getTestDb()
+        .insert(assistantSettings)
+        .values({ enabled: true, perContactDailyLimit: 2 });
+      await receiveAndWait(writesAt('hola', 'wamid.A', 0));
+      await receiveAndWait(writesAt('¿y Catia?', 'wamid.B', 10));
+
+      // At the limit within 24 h this would hand over; a day later it answers.
+      await receiveAndWait(
+        writesAt('¿siguen ahí?', 'wamid.C', 24 * 60 * 60 + 20)
+      );
+
+      expect(sendText).toHaveBeenCalledTimes(3);
+      expect(sendText).toHaveBeenLastCalledWith('584140000001', SENT_TEXT);
+      expect((await runs()).at(-1)).toMatchObject({ outcome: 'answered' });
+      expect(await conversation()).toMatchObject({ handoffReason: null });
+    });
+
     it('counts several messages answered together as a single reply', async () => {
       await getTestDb()
         .insert(assistantSettings)
