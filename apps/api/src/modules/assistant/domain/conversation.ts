@@ -33,13 +33,26 @@ export interface ModelTurn {
  * consecutive lines are joined. It starts after the last handoff notice:
  * what came before was for a person, and reading it would make the model
  * hand the chat over again. Empty when the customer has nothing pending.
+ *
+ * The batch being answered (`batchIds`) goes last: a message the customer
+ * sent while the previous reply was being written sorts before that reply,
+ * but the reply never saw it.
  */
-export function toModelTurns(lines: ChatLine[]): ModelTurn[] {
+export function toModelTurns(
+  lines: ChatLine[],
+  batchIds: string[] = []
+): ModelTurn[] {
   const lastHandoff = lines.findLastIndex(
     (l) => l.source === 'assistant' && isHandoffNotice(l.body)
   );
+  const recent = lines.slice(lastHandoff + 1);
+  const inBatch = (l: ChatLine) => batchIds.includes(l.id);
+  const ordered = [
+    ...recent.filter((l) => !inBatch(l)),
+    ...recent.filter(inBatch),
+  ];
   const turns: ModelTurn[] = [];
-  for (const { source, type, body, status } of lines.slice(lastHandoff + 1)) {
+  for (const { source, type, body, status } of ordered) {
     if (type !== 'text' || !body?.trim() || status === 'failed') continue;
     const role =
       source === 'customer'

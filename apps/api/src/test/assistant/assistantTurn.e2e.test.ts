@@ -1011,6 +1011,27 @@ describe('assistant turn (webhook → wait → model → WhatsApp)', () => {
       });
     });
 
+    it('answers a message that arrived while the previous reply was being written', async () => {
+      await turnOn();
+      await deliver(sentAt('hola', 'wamid.A', 0));
+      reply.mockImplementationOnce(async () => {
+        // The customer writes while the model thinks: it lands before the reply.
+        await deliver(sentAt('¿dónde queda Catia?', 'wamid.B', 9));
+        now = new Date((CUSTOMER_SENT_AT + 10) * 1000);
+        return REPLY;
+      });
+
+      expect(await sweepAfter(8)).toBe(1);
+      expect(await sweepAfter(8)).toBe(1);
+
+      expect(reply).toHaveBeenCalledTimes(2);
+      expect(reply.mock.calls[1]?.[0].turns.at(-1)).toEqual({
+        role: 'user',
+        content: '¿dónde queda Catia?',
+      });
+      expect(sendText).toHaveBeenCalledTimes(2);
+    });
+
     it('does not answer if a person takes the chat during the wait', async () => {
       await turnOn();
       await deliver(sentAt('hola', 'wamid.A', 0));

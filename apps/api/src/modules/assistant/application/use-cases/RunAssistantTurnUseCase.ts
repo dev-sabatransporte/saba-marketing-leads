@@ -162,7 +162,7 @@ export class RunAssistantTurnUseCase implements RunAssistantTurnPort {
         usage: null,
       });
     }
-    const turns = toModelTurns(chat.messages);
+    const turns = toModelTurns(chat.messages, messageIds);
     if (!turns.length) return 'ignored';
 
     await this.channel.showTyping(conversationId);

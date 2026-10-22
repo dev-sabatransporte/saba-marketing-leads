@@ -145,6 +145,22 @@ describe('buildInstructions', () => {
 });
 
 describe('toModelTurns', () => {
+  it('puts the batch last: a reply written before it arrived did not answer it', () => {
+    const hola = line('customer', 'hola');
+    const late = line('customer', '¿y Catia?');
+
+    expect(
+      toModelTurns(
+        [hola, late, line('assistant', 'Hola, ¿en qué te ayudo?')],
+        [late.id]
+      )
+    ).toEqual([
+      { role: 'user', content: 'hola' },
+      { role: 'assistant', content: 'Hola, ¿en qué te ayudo?' },
+      { role: 'user', content: '¿y Catia?' },
+    ]);
+  });
+
   it('maps customer to user and assistant to assistant, joining consecutive lines', () => {
     expect(
       toModelTurns([
