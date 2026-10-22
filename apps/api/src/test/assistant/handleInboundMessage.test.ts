@@ -517,4 +517,90 @@ describe('HandleInboundMessageUseCase', () => {
     expect(send).toHaveBeenCalledTimes(1);
     expect(record).toHaveBeenCalledTimes(1);
   });
+
+  describe('reply limits', () => {
+    /** Replies today (no conversation) and to this contact in the last 24 h. */
+    function counting(today: number, contact: number) {
+      return vi.fn(
+        async ({ conversationId }: { since: Date; conversationId?: string }) =>
+          conversationId ? contact : today
+      );
+    }
+
+    it('counts today from midnight in Venezuela and the contact over 24 h', async () => {
+      const countReplies = counting(0, 0);
+      const { turn } = setup({ countReplies });
+
+      expect(await turn()).toBe('answered');
+      // NOW is 11:00 in Caracas.
+      expect(countReplies).toHaveBeenCalledWith({
+        since: new Date('2026-10-21T04:00:00Z'),
+      });
+      expect(countReplies).toHaveBeenCalledWith({
+        since: new Date('2026-10-20T15:00:00Z'),
+        conversationId: 'c-1',
+      });
+    });
+
+    it('answers the contact one below the limit', async () => {
+      const { turn } = setup({
+        countReplies: counting(0, 19),
+        limits: { perContactDailyLimit: 20 },
+      });
+
+      expect(await turn()).toBe('answered');
+    });
+
+    it('hands over with limit_reached once the contact got its replies', async () => {
+      const { turn, reply, send, requestHandoff, record } = setup({
+        countReplies: counting(0, 20),
+        limits: { perContactDailyLimit: 20 },
+      });
+
+      expect(await turn()).toBe('handoff');
+      expect(reply).not.toHaveBeenCalled();
+      expect(requestHandoff).toHaveBeenCalledWith('c-1', 'limit_reached');
+      expect(send).toHaveBeenCalledWith('c-1', HANDOFF_NOTICE);
+      expect(record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          outcome: 'handoff',
+          reason: 'limit_reached',
+          createdAt: NOW,
+        })
+      );
+    });
+
+    it("stays silent once the day's limit is reached: no notice, no handoff, no run", async () => {
+      const { turn, reply, send, requestHandoff, record } = setup({
+        countReplies: counting(300, 0),
+        limits: { dailyReplyLimit: 300 },
+      });
+
+      expect(await turn()).toBe('daily_limit');
+      expect(reply).not.toHaveBeenCalled();
+      expect(send).not.toHaveBeenCalled();
+      expect(requestHandoff).not.toHaveBeenCalled();
+      expect(record).not.toHaveBeenCalled();
+    });
+
+    it("the day's limit wins over the contact's: it never sends a notice", async () => {
+      const { turn, send } = setup({
+        countReplies: counting(300, 20),
+        limits: { dailyReplyLimit: 300, perContactDailyLimit: 20 },
+      });
+
+      expect(await turn()).toBe('daily_limit');
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    it("stays silent for a message that is not text too once the day's limit is reached", async () => {
+      const { turn, send } = setup({
+        countReplies: counting(300, 0),
+        limits: { dailyReplyLimit: 300 },
+      });
+
+      expect(await turn('in-2', 'image')).toBe('daily_limit');
+      expect(send).not.toHaveBeenCalled();
+    });
+  });
 });

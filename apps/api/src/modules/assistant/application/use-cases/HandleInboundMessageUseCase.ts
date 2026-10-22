@@ -21,6 +21,10 @@ import {
 } from '../../domain/handoff';
 import { buildInstructions } from '../../domain/instructions';
 import { withMapLinks } from '../../domain/mapLinks';
+import {
+  contactWindowStart,
+  startOfVenezuelanDay,
+} from '../../domain/replyLimits';
 import { ASSISTANT_TOKENS } from '../../tokens';
 import type {
   HandleInboundMessagePort,
@@ -70,6 +74,8 @@ type Decision =
  * row in `assistant_runs` for every attempt. When it must not or cannot
  * answer it hands the chat to a person ("Necesita asesor") and goes silent
  * until then. Switched off, or with nothing pending, it does nothing.
+ * Past the day's limit it stays silent for everyone until midnight in
+ * Venezuela; past a contact's limit it hands that chat over.
  */
 @Injectable()
 export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
@@ -96,7 +102,8 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
     type: string;
   }): Promise<TurnResult> {
     // Read on every turn: switching it off applies to the next message.
-    const { enabled, simpleReplies } = await this.settings.get();
+    const { enabled, simpleReplies, dailyReplyLimit, perContactDailyLimit } =
+      await this.settings.get();
     if (!enabled) return 'disabled';
     if (!isForTheAssistant(type)) return 'ignored';
 
@@ -111,7 +118,17 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
     // Several messages at once: only the newest one's turn answers them all.
     if (!isLatestCustomerMessage(chat.messages, messageId)) return 'ignored';
 
-    const startedAt = this.clock.now().getTime();
+    const now = this.clock.now();
+    // No handoff here: the team sees the panel's notice instead, and handing
+    // every chat over would leave them a pile of "Necesita asesor".
+    if (
+      (await this.runs.countReplies({ since: startOfVenezuelanDay(now) })) >=
+      dailyReplyLimit
+    ) {
+      return 'daily_limit';
+    }
+
+    const startedAt = now.getTime();
     const toolCalls: ToolCall[] = [];
     const run = (fields: RunFields): Promise<void> => {
       const finishedAt = this.clock.now();
@@ -130,6 +147,19 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
     ): Promise<TurnResult> =>
       this.handOver(conversationId, reason, details, run);
 
+    // The handoff mark keeps it to a single one: the chat stays silent until resolved.
+    if (
+      (await this.runs.countReplies({
+        since: contactWindowStart(now),
+        conversationId,
+      })) >= perContactDailyLimit
+    ) {
+      return handOver('limit_reached', {
+        errorDetail: null,
+        model: null,
+        usage: null,
+      });
+    }
     if (type !== 'text') {
       return handOver('non_text', {
         errorDetail: null,

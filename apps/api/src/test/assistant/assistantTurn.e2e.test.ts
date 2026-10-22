@@ -727,4 +727,142 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
       });
     });
   });
+
+  describe('reply limits', () => {
+    async function runs() {
+      return getTestDb().select().from(assistantRuns);
+    }
+
+    /** Waits until the turn of this message left its row. */
+    async function receiveAndWait(payload: unknown): Promise<void> {
+      const before = (await runs()).length;
+      await receive(payload);
+      await vi.waitFor(async () => {
+        if ((await runs()).length === before) {
+          throw new Error('todavía no hay turno');
+        }
+      });
+    }
+
+    /** The customer writes `seconds` after the first message; the clock follows. */
+    function writesAt(body: string, wamid: string, seconds: number): unknown {
+      now = new Date((CUSTOMER_SENT_AT + seconds + 1) * 1000);
+      return textMessage(body, wamid, seconds);
+    }
+
+    /** Answered turns of other chats, as if the assistant had been busy today. */
+    async function repliesElsewhere(count: number, at: Date): Promise<void> {
+      await getTestDb()
+        .insert(assistantRuns)
+        .values(
+          Array.from({ length: count }, () => ({
+            conversationId: crypto.randomUUID(),
+            inboundMessageIds: [crypto.randomUUID()],
+            outcome: 'answered' as const,
+            latencyMs: 10,
+            createdAt: at,
+          }))
+        );
+    }
+
+    it('hands a contact over once with limit_reached after its replies of the last 24 h', async () => {
+      await getTestDb()
+        .insert(assistantSettings)
+        .values({ enabled: true, perContactDailyLimit: 2 });
+
+      await receiveAndWait(writesAt('hola', 'wamid.A', 0));
+      await receiveAndWait(writesAt('¿y Catia?', 'wamid.B', 10));
+      expect(sendText).toHaveBeenCalledTimes(2);
+      reply.mockClear();
+
+      await receiveAndWait(writesAt('¿y el horario?', 'wamid.C', 20));
+      const run = (await runs()).at(-1);
+      expect(reply).not.toHaveBeenCalled();
+      expect(sendText).toHaveBeenLastCalledWith('584140000001', HANDOFF_NOTICE);
+      expect(await conversation()).toMatchObject({
+        handoffReason: 'limit_reached',
+        assignedTo: null,
+      });
+      expect(run).toMatchObject({
+        outcome: 'handoff',
+        reason: 'limit_reached',
+      });
+
+      // Silent from then on: a single handoff, not one per message.
+      sendText.mockClear();
+      await receive(writesAt('¿hola?', 'wamid.D', 30));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(sendText).not.toHaveBeenCalled();
+      expect(reply).not.toHaveBeenCalled();
+      expect(await runs()).toHaveLength(3);
+    });
+
+    it('counts several messages answered together as a single reply', async () => {
+      await getTestDb()
+        .insert(assistantSettings)
+        .values({ enabled: true, perContactDailyLimit: 2 });
+
+      now = new Date((CUSTOMER_SENT_AT + 3) * 1000);
+      await receiveAndWait({
+        messaging_product: 'whatsapp',
+        contacts: [{ wa_id: '584140000001', profile: { name: 'Cliente' } }],
+        messages: ['hola', 'buenas', '¿dónde queda Catia?'].map((body, i) => ({
+          id: `wamid.G${i}`,
+          from: '584140000001',
+          timestamp: String(CUSTOMER_SENT_AT + i),
+          type: 'text',
+          text: { body },
+        })),
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await receiveAndWait(writesAt('¿y el horario?', 'wamid.H', 10));
+
+      expect(sendText).toHaveBeenCalledTimes(2);
+      expect(sendText).toHaveBeenLastCalledWith('584140000001', SENT_TEXT);
+      expect((await runs()).map((r) => r.outcome)).toEqual([
+        'answered',
+        'answered',
+      ]);
+    });
+
+    it("stays silent for the rest of the day once the day's limit is reached, without a handoff", async () => {
+      await getTestDb()
+        .insert(assistantSettings)
+        .values({ enabled: true, dailyReplyLimit: 3 });
+      await repliesElsewhere(3, now);
+
+      await receive(textMessage('hola'));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(reply).not.toHaveBeenCalled();
+      expect(sendText).not.toHaveBeenCalled();
+      expect(await conversation()).toMatchObject({
+        handoffRequestedAt: null,
+        handoffReason: null,
+      });
+      expect(await runs()).toHaveLength(3);
+    });
+
+    it('answers again after midnight in Venezuela', async () => {
+      await getTestDb()
+        .insert(assistantSettings)
+        .values({ enabled: true, dailyReplyLimit: 3 });
+      // 23:59 in Caracas: the day's three replies went out a minute ago.
+      const midnight = Date.parse('2026-10-08T04:00:00Z') / 1000;
+      await repliesElsewhere(3, new Date((midnight - 60) * 1000));
+      const sentAt = (seconds: number) => seconds - CUSTOMER_SENT_AT;
+
+      now = new Date((midnight - 30) * 1000);
+      await receive(textMessage('hola', 'wamid.A', sentAt(midnight - 40)));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(sendText).not.toHaveBeenCalled();
+
+      now = new Date((midnight + 30) * 1000);
+      await receiveAndWait(
+        textMessage('¿siguen ahí?', 'wamid.B', sentAt(midnight + 20))
+      );
+      expect(sendText).toHaveBeenCalledWith('584140000001', SENT_TEXT);
+      expect((await runs()).at(-1)).toMatchObject({ outcome: 'answered' });
+    });
+  });
 });
