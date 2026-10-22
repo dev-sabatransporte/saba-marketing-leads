@@ -15,6 +15,10 @@ import {
   type Store,
 } from '../../modules/assistant/domain/instructions';
 import { withMapLinks } from '../../modules/assistant/domain/mapLinks';
+import {
+  contactWindowStart,
+  startOfVenezuelanDay,
+} from '../../modules/assistant/domain/replyLimits';
 
 let nextId = 0;
 const line = (
@@ -366,6 +370,27 @@ describe('withMapLinks', () => {
       withMapLinks('Iglesia y Catia abren a las 8.', [IGLESIA, CATIA])
     ).toBe(
       'Iglesia y Catia abren a las 8.\n\n📍 Catia: https://maps.app.goo.gl/catia'
+    );
+  });
+});
+
+describe('reply limits', () => {
+  it('counts the global limit per calendar day in Venezuela (UTC-4)', () => {
+    // 03:59 UTC is still the previous day in Caracas.
+    expect(startOfVenezuelanDay(new Date('2026-10-22T03:59:00Z'))).toEqual(
+      new Date('2026-10-21T04:00:00Z')
+    );
+    expect(startOfVenezuelanDay(new Date('2026-10-22T04:00:00Z'))).toEqual(
+      new Date('2026-10-22T04:00:00Z')
+    );
+    expect(startOfVenezuelanDay(new Date('2026-10-22T23:30:00Z'))).toEqual(
+      new Date('2026-10-22T04:00:00Z')
+    );
+  });
+
+  it('counts the per-contact limit over the last 24 h', () => {
+    expect(contactWindowStart(new Date('2026-10-22T15:00:00Z'))).toEqual(
+      new Date('2026-10-21T15:00:00Z')
     );
   });
 });

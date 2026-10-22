@@ -113,14 +113,17 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
 
     const startedAt = this.clock.now().getTime();
     const toolCalls: ToolCall[] = [];
-    const run = (fields: RunFields): Promise<void> =>
-      this.runs.record({
+    const run = (fields: RunFields): Promise<void> => {
+      const finishedAt = this.clock.now();
+      return this.runs.record({
         conversationId,
         inboundMessageIds: [messageId],
-        latencyMs: this.clock.now().getTime() - startedAt,
+        latencyMs: finishedAt.getTime() - startedAt,
         toolCalls: [...toolCalls],
+        createdAt: finishedAt,
         ...fields,
       });
+    };
     const handOver = (
       reason: HandoffReason,
       details: Pick<RunFields, 'errorDetail' | 'model' | 'usage'>

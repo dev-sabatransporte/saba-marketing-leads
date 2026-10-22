@@ -40,4 +40,6 @@ export interface NewAssistantRun {
   usage: TokenUsage | null;
   toolCalls: ToolCall[];
   latencyMs: number;
+  /** From the assistant's clock: the reply limits are counted against it. */
+  createdAt: Date;
 }

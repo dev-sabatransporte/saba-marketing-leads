@@ -11,7 +11,10 @@ import {
   ModelUnavailableError,
 } from '../../modules/assistant/domain/AssistantErrors';
 import type { NewAssistantRun } from '../../modules/assistant/domain/AssistantRun';
-import { DEFAULT_ASSISTANT_SETTINGS } from '../../modules/assistant/domain/AssistantSettings';
+import {
+  type AssistantSettings,
+  DEFAULT_ASSISTANT_SETTINGS,
+} from '../../modules/assistant/domain/AssistantSettings';
 import {
   HANDOFF_NOTICE,
   handoffNotice,
@@ -79,7 +82,9 @@ function setup({
   search = vi.fn(async (_query: string): Promise<Product[]> => [BERA]),
   send = vi.fn(async (_id: string, _body: string) => ({ id: 'out-1' })),
   record = vi.fn(async (_run: NewAssistantRun): Promise<void> => undefined),
+  countReplies = vi.fn(async (): Promise<number> => 0),
   simpleReplies = true,
+  limits = {},
 }: {
   chat?: ChannelChat;
   /** What the chat looks like once the model has answered. */
@@ -91,7 +96,14 @@ function setup({
   search?: (query: string) => Promise<Product[]>;
   send?: (id: string, body: string) => Promise<{ id: string }>;
   record?: (run: NewAssistantRun) => Promise<void>;
+  countReplies?: (filter: {
+    since: Date;
+    conversationId?: string;
+  }) => Promise<number>;
   simpleReplies?: boolean;
+  limits?: Partial<
+    Pick<AssistantSettings, 'perContactDailyLimit' | 'dailyReplyLimit'>
+  >;
 } = {}) {
   const requestHandoff = vi.fn(async (): Promise<void> => undefined);
   const useCase = new HandleInboundMessageUseCase(
@@ -100,6 +112,7 @@ function setup({
         ...DEFAULT_ASSISTANT_SETTINGS,
         enabled: true,
         simpleReplies,
+        ...limits,
       }),
     },
     {
@@ -110,12 +123,20 @@ function setup({
     { current: async () => stores },
     { search },
     { reply },
-    { record },
+    { record, countReplies },
     { now: () => NOW }
   );
   const turn = (messageId = 'in-2', type = 'text') =>
     useCase.execute({ conversationId: 'c-1', messageId, type });
-  return { turn, reply, search, send, record, requestHandoff };
+  return {
+    turn,
+    reply,
+    search,
+    send,
+    record,
+    countReplies,
+    requestHandoff,
+  };
 }
 
 describe('HandleInboundMessageUseCase', () => {

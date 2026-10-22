@@ -102,6 +102,7 @@ describe('assistant persistence (against Postgres)', () => {
         { tool: 'search_products', query: 'bera', resultCount: null },
       ],
       latencyMs: 1500,
+      createdAt: new Date('2026-10-21T15:00:00Z'),
     });
 
     const [run] = await getTestDb().select().from(assistantRuns);
@@ -120,6 +121,41 @@ describe('assistant persistence (against Postgres)', () => {
         { tool: 'search_products', query: 'bera', resultCount: null },
       ],
       latencyMs: 1500,
+      createdAt: new Date('2026-10-21T15:00:00Z'),
     });
+  });
+
+  it('counts the replies since a moment, overall or for one conversation', async () => {
+    const runs = new DrizzleAssistantRunsRepository(getTestDb());
+    const mine = crypto.randomUUID();
+    const other = crypto.randomUUID();
+    const run = (
+      conversationId: string,
+      outcome: 'answered' | 'handoff' | 'error',
+      createdAt: string
+    ) =>
+      runs.record({
+        conversationId,
+        inboundMessageIds: [crypto.randomUUID()],
+        sentMessageId: null,
+        outcome,
+        reason: null,
+        errorDetail: null,
+        model: null,
+        usage: null,
+        toolCalls: [],
+        latencyMs: 10,
+        createdAt: new Date(createdAt),
+      });
+    await run(mine, 'answered', '2026-10-21T09:59:59Z');
+    await run(mine, 'answered', '2026-10-21T10:00:00Z');
+    await run(mine, 'answered', '2026-10-21T12:00:00Z');
+    await run(mine, 'handoff', '2026-10-21T12:00:00Z');
+    await run(mine, 'error', '2026-10-21T12:00:00Z');
+    await run(other, 'answered', '2026-10-21T13:00:00Z');
+
+    const since = new Date('2026-10-21T10:00:00Z');
+    expect(await runs.countReplies({ since })).toBe(3);
+    expect(await runs.countReplies({ since, conversationId: mine })).toBe(2);
   });
 });

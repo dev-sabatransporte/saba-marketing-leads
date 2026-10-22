@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { and, count, eq, gte } from 'drizzle-orm';
 import {
   type ApiDb,
   DRIZZLE_CLIENT,
@@ -28,6 +29,29 @@ export class DrizzleAssistantRunsRepository
       cacheWriteTokens: run.usage?.cacheWriteTokens ?? null,
       toolCalls: run.toolCalls,
       latencyMs: run.latencyMs,
+      createdAt: run.createdAt,
     });
+  }
+
+  async countReplies({
+    since,
+    conversationId,
+  }: {
+    since: Date;
+    conversationId?: string;
+  }): Promise<number> {
+    const [row] = await this.db
+      .select({ replies: count() })
+      .from(assistantRuns)
+      .where(
+        and(
+          eq(assistantRuns.outcome, 'answered'),
+          gte(assistantRuns.createdAt, since),
+          conversationId
+            ? eq(assistantRuns.conversationId, conversationId)
+            : undefined
+        )
+      );
+    return row?.replies ?? 0;
   }
 }
