@@ -8,8 +8,6 @@ import {
 } from '../../domain/AssistantRun';
 import {
   aPersonHasTheChat,
-  isForTheAssistant,
-  isLatestCustomerMessage,
   type ModelTurn,
   toModelTurns,
   withinReplyWindow,
@@ -27,9 +25,9 @@ import {
 } from '../../domain/replyLimits';
 import { ASSISTANT_TOKENS } from '../../tokens';
 import type {
-  HandleInboundMessagePort,
+  RunAssistantTurnPort,
   TurnResult,
-} from '../ports/in/HandleInboundMessagePort';
+} from '../ports/in/RunAssistantTurnPort';
 import type {
   AssistantModelPort,
   ModelReply,
@@ -70,15 +68,15 @@ type Decision =
   | { kind: 'failed'; errorDetail: string; billed: Billed };
 
 /**
- * One assistant turn: a customer message in, at most one message out, and a
- * row in `assistant_runs` for every attempt. When it must not or cannot
+ * One assistant turn: the customer messages gathered while it waited in, at
+ * most one message out, and a row in `assistant_runs` for every attempt. When it must not or cannot
  * answer it hands the chat to a person ("Necesita asesor") and goes silent
  * until then. Switched off, or with nothing pending, it does nothing.
  * Past the day's limit it stays silent for everyone until midnight in
  * Venezuela; past a contact's limit it hands that chat over.
  */
 @Injectable()
-export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
+export class RunAssistantTurnUseCase implements RunAssistantTurnPort {
   constructor(
     @Inject(ASSISTANT_TOKENS.Settings)
     private readonly settings: AssistantSettingsRepositoryPort,
@@ -94,18 +92,15 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
 
   async execute({
     conversationId,
-    messageId,
-    type,
+    messageIds,
   }: {
     conversationId: string;
-    messageId: string;
-    type: string;
+    messageIds: string[];
   }): Promise<TurnResult> {
-    // Read on every turn: switching it off applies to the next message.
+    // Read on every turn: switching it off during the wait applies too.
     const { enabled, simpleReplies, dailyReplyLimit, perContactDailyLimit } =
       await this.settings.get();
     if (!enabled) return 'disabled';
-    if (!isForTheAssistant(type)) return 'ignored';
 
     const chat = await this.channel.read(conversationId, HISTORY_LIMIT);
     if (
@@ -115,8 +110,6 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
     ) {
       return 'ignored';
     }
-    // Several messages at once: only the newest one's turn answers them all.
-    if (!isLatestCustomerMessage(chat.messages, messageId)) return 'ignored';
 
     const now = this.clock.now();
     // No handoff here: the team sees the panel's notice instead, and handing
@@ -134,7 +127,7 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
       const finishedAt = this.clock.now();
       return this.runs.record({
         conversationId,
-        inboundMessageIds: [messageId],
+        inboundMessageIds: messageIds,
         latencyMs: finishedAt.getTime() - startedAt,
         toolCalls: [...toolCalls],
         createdAt: finishedAt,
@@ -160,7 +153,9 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
         usage: null,
       });
     }
-    if (type !== 'text') {
+    // One image among the texts is enough: someone has to open it.
+    const batch = chat.messages.filter((m) => messageIds.includes(m.id));
+    if (batch.some((m) => m.type !== 'text')) {
       return handOver('non_text', {
         errorDetail: null,
         model: null,
@@ -169,6 +164,8 @@ export class HandleInboundMessageUseCase implements HandleInboundMessagePort {
     }
     const turns = toModelTurns(chat.messages);
     if (!turns.length) return 'ignored';
+
+    await this.channel.showTyping(conversationId);
 
     const { stores, misconfigured } = await this.stores.current();
     if (misconfigured) {

@@ -75,21 +75,6 @@ export function aPersonHasTheChat(chat: {
   );
 }
 
-/**
- * Whether `messageId` is still the customer's last message. When several
- * arrive together each one starts a turn; only the turn of the newest answers,
- * and it sees all of them.
- */
-export function isLatestCustomerMessage(
-  lines: ChatLine[],
-  messageId: string
-): boolean {
-  return (
-    lines.findLast((l) => l.source === 'customer' && isForTheAssistant(l.type))
-      ?.id === messageId
-  );
-}
-
 /** Meta only accepts free text for 24 h after the customer's last message. */
 export function withinReplyWindow(
   lastInboundAt: Date | null,

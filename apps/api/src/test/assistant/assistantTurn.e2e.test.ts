@@ -14,6 +14,7 @@ import { BusModule } from '../../bus.module';
 import { DrizzleModule } from '../../infrastructure/database/drizzle.module';
 import { ErrorsModule } from '../../infrastructure/errors/ErrorsModule';
 import { LoggingModule } from '../../infrastructure/logging/LoggingModule';
+import type { ReplyToDueChatsPort } from '../../modules/assistant/application/ports/in/ReplyToDueChatsPort';
 import type {
   AssistantModelPort,
   ModelReply,
@@ -30,7 +31,9 @@ import {
 } from '../../modules/assistant/domain/handoff';
 import type { Store } from '../../modules/assistant/domain/instructions';
 import type { Product } from '../../modules/assistant/domain/product';
+import { AssistantReplySweeper } from '../../modules/assistant/infrastructure/bus/AssistantReplySweeper';
 import {
+  assistantPendingReplies,
   assistantRuns,
   assistantSettings,
 } from '../../modules/assistant/infrastructure/persistence/assistant.schema';
@@ -82,6 +85,7 @@ const REPLY: ModelReply = {
 };
 
 const sendText = vi.fn<(to: string, body: string) => Promise<string>>();
+const sendTypingIndicator = vi.fn<(wamid: string) => Promise<void>>();
 const reply = vi.fn<AssistantModelPort['reply']>();
 const currentStores = vi.fn<() => Promise<StoresSnapshot>>();
 const searchProducts = vi.fn<(query: string) => Promise<Product[]>>();
@@ -131,15 +135,51 @@ const textMessage = (body: string, wamid = 'wamid.IN1', secondsLater = 0) =>
     timestamp: String(CUSTOMER_SENT_AT + secondsLater),
   });
 
-describe('assistant turn (webhook → model → WhatsApp)', () => {
+describe('assistant turn (webhook → wait → model → WhatsApp)', () => {
   let app: INestApplication;
   let processEvent: ProcessWebhookEventPort;
   let events: WebhookEventRepositoryPort;
+  let replyToDue: ReplyToDueChatsPort;
 
-  async function receive(payload: unknown): Promise<void> {
+  /** Messages in the queue, waiting or being answered. */
+  async function queued(): Promise<number> {
+    const rows = await getTestDb().select().from(assistantPendingReplies);
+    return rows.reduce(
+      (total, row) => total + row.messageIds.length + row.claimedIds.length,
+      0
+    );
+  }
+
+  /** The webhook arrives and the message joins the chat's batch (if it should). */
+  async function deliver(payload: unknown): Promise<void> {
+    const before = await queued();
     const [eventId] = await events.save([{ field: 'messages', payload }]);
     if (!eventId) throw new Error('no se guardó el evento');
     await processEvent.execute(eventId);
+    // Queued off the event bus, with the clock as it is now; nothing is
+    // queued when the message is not for the assistant.
+    await vi
+      .waitFor(
+        async () => {
+          if ((await queued()) === before) {
+            throw new Error('todavía no está en la cola');
+          }
+        },
+        { timeout: 300 }
+      )
+      .catch(() => undefined);
+  }
+
+  /** The sweep, `seconds` after now (the timer is off in this test). */
+  async function sweepAfter(seconds: number): Promise<number> {
+    now = new Date(now.getTime() + seconds * 1000);
+    return replyToDue.execute();
+  }
+
+  /** A message, and the assistant's turn once the longest wait is over. */
+  async function receive(payload: unknown): Promise<void> {
+    await deliver(payload);
+    await sweepAfter(31);
   }
 
   async function turnOn(): Promise<void> {
@@ -155,7 +195,8 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
     });
   }
 
-  beforeAll(async () => {
+  /** A fresh API process against the same database. */
+  async function startApp(): Promise<void> {
     const moduleRef = await Test.createTestingModule({
       imports: [
         LoggingModule,
@@ -170,7 +211,7 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
       .useValue({
         sendText,
         downloadMedia: vi.fn(),
-        sendTypingIndicator: vi.fn(),
+        sendTypingIndicator,
       })
       .overrideProvider(WHATSAPP_TOKENS.Clock)
       .useValue({ now: () => now })
@@ -182,13 +223,19 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
       .useValue({ search: searchProducts })
       .overrideProvider(ASSISTANT_TOKENS.Stores)
       .useValue({ current: currentStores })
+      // The test moves the clock and sweeps by hand.
+      .overrideProvider(AssistantReplySweeper)
+      .useValue({})
       .compile();
 
     app = moduleRef.createNestApplication();
     await app.init();
     processEvent = app.get(WHATSAPP_TOKENS.ProcessWebhookEvent);
     events = app.get(WHATSAPP_TOKENS.WebhookEventRepository);
-  });
+    replyToDue = app.get(ASSISTANT_TOKENS.ReplyToDueChats);
+  }
+
+  beforeAll(startApp);
 
   afterAll(async () => {
     await app.close();
@@ -200,6 +247,7 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
     now = new Date((CUSTOMER_SENT_AT + 60) * 1000);
     let sent = 0;
     sendText.mockReset().mockImplementation(async () => `wamid.OUT${++sent}`);
+    sendTypingIndicator.mockReset().mockResolvedValue(undefined);
     reply.mockReset().mockResolvedValue(REPLY);
     searchProducts.mockReset().mockResolvedValue([BERA]);
     currentStores
@@ -771,11 +819,11 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
         .values({ enabled: true, perContactDailyLimit: 2 });
 
       await receiveAndWait(writesAt('hola', 'wamid.A', 0));
-      await receiveAndWait(writesAt('¿y Catia?', 'wamid.B', 10));
+      await receiveAndWait(writesAt('¿y Catia?', 'wamid.B', 100));
       expect(sendText).toHaveBeenCalledTimes(2);
       reply.mockClear();
 
-      await receiveAndWait(writesAt('¿y el horario?', 'wamid.C', 20));
+      await receiveAndWait(writesAt('¿y el horario?', 'wamid.C', 200));
       const run = (await runs()).at(-1);
       expect(reply).not.toHaveBeenCalled();
       expect(sendText).toHaveBeenLastCalledWith('584140000001', HANDOFF_NOTICE);
@@ -790,7 +838,7 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
 
       // Silent from then on: a single handoff, not one per message.
       sendText.mockClear();
-      await receive(writesAt('¿hola?', 'wamid.D', 30));
+      await receive(writesAt('¿hola?', 'wamid.D', 300));
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect(sendText).not.toHaveBeenCalled();
       expect(reply).not.toHaveBeenCalled();
@@ -802,11 +850,11 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
         .insert(assistantSettings)
         .values({ enabled: true, perContactDailyLimit: 2 });
       await receiveAndWait(writesAt('hola', 'wamid.A', 0));
-      await receiveAndWait(writesAt('¿y Catia?', 'wamid.B', 10));
+      await receiveAndWait(writesAt('¿y Catia?', 'wamid.B', 100));
 
       // At the limit within 24 h this would hand over; a day later it answers.
       await receiveAndWait(
-        writesAt('¿siguen ahí?', 'wamid.C', 24 * 60 * 60 + 20)
+        writesAt('¿siguen ahí?', 'wamid.C', 24 * 60 * 60 + 200)
       );
 
       expect(sendText).toHaveBeenCalledTimes(3);
@@ -833,7 +881,7 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
         })),
       });
       await new Promise((resolve) => setTimeout(resolve, 50));
-      await receiveAndWait(writesAt('¿y el horario?', 'wamid.H', 10));
+      await receiveAndWait(writesAt('¿y el horario?', 'wamid.H', 100));
 
       expect(sendText).toHaveBeenCalledTimes(2);
       expect(sendText).toHaveBeenLastCalledWith('584140000001', SENT_TEXT);
@@ -870,8 +918,9 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
       await repliesElsewhere(3, new Date((midnight - 60) * 1000));
       const sentAt = (seconds: number) => seconds - CUSTOMER_SENT_AT;
 
-      now = new Date((midnight - 30) * 1000);
-      await receive(textMessage('hola', 'wamid.A', sentAt(midnight - 40)));
+      // Its wait ends before midnight too.
+      now = new Date((midnight - 90) * 1000);
+      await receive(textMessage('hola', 'wamid.A', sentAt(midnight - 100)));
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect(sendText).not.toHaveBeenCalled();
 
@@ -881,6 +930,158 @@ describe('assistant turn (webhook → model → WhatsApp)', () => {
       );
       expect(sendText).toHaveBeenCalledWith('584140000001', SENT_TEXT);
       expect((await runs()).at(-1)).toMatchObject({ outcome: 'answered' });
+    });
+  });
+
+  describe('waiting for the customer to finish', () => {
+    /** The customer writes `seconds` after the first message; the clock follows. */
+    function sentAt(body: string, wamid: string, seconds: number): unknown {
+      now = new Date((CUSTOMER_SENT_AT + seconds) * 1000);
+      return textMessage(body, wamid, seconds);
+    }
+
+    async function pendingRows() {
+      return getTestDb().select().from(assistantPendingReplies);
+    }
+
+    it('each message restarts the 8 s wait; then one reply covers all of them', async () => {
+      await turnOn();
+
+      await deliver(sentAt('hola', 'wamid.A', 0));
+      await deliver(sentAt('una pregunta', 'wamid.B', 5));
+      await deliver(sentAt('¿dónde queda Catia?', 'wamid.C', 9));
+
+      // 16 s after the first, but only 7 s after the last: still waiting.
+      expect(await sweepAfter(7)).toBe(0);
+      expect(reply).not.toHaveBeenCalled();
+
+      expect(await sweepAfter(1)).toBe(1);
+      expect(reply).toHaveBeenCalledTimes(1);
+      expect(reply.mock.calls[0]?.[0].turns).toEqual([
+        {
+          role: 'user',
+          content: 'hola\nuna pregunta\n¿dónde queda Catia?',
+        },
+      ]);
+      expect(sendText).toHaveBeenCalledTimes(1);
+      const runs = await getTestDb().select().from(assistantRuns);
+      expect(runs).toHaveLength(1);
+      expect(runs[0]?.inboundMessageIds).toHaveLength(3);
+      expect(await pendingRows()).toEqual([]);
+    });
+
+    it('never waits more than 30 s for someone who keeps writing', async () => {
+      await turnOn();
+      for (const second of [0, 7, 14, 21, 28]) {
+        await deliver(sentAt(`mensaje ${second}`, `wamid.${second}`, second));
+      }
+
+      // 29 s after the first: the last one is only 1 s old, but the cap is near.
+      expect(await sweepAfter(1)).toBe(0);
+      expect(await sweepAfter(1)).toBe(1);
+      expect(sendText).toHaveBeenCalledTimes(1);
+      const [run] = await getTestDb().select().from(assistantRuns);
+      expect(run?.inboundMessageIds).toHaveLength(5);
+    });
+
+    it('the wait survives a restart of the API', async () => {
+      await turnOn();
+      await deliver(sentAt('hola', 'wamid.A', 0));
+
+      await app.close();
+      await startApp();
+
+      expect(await sweepAfter(8)).toBe(1);
+      expect(sendText).toHaveBeenCalledWith('584140000001', SENT_TEXT);
+    });
+
+    it('a message that arrives after the reply starts a new wait', async () => {
+      await turnOn();
+      await receive(sentAt('hola', 'wamid.A', 0));
+      expect(sendText).toHaveBeenCalledTimes(1);
+
+      await deliver(sentAt('¿y el horario?', 'wamid.B', 60));
+      expect(await sweepAfter(7)).toBe(0);
+      expect(await sweepAfter(1)).toBe(1);
+
+      expect(sendText).toHaveBeenCalledTimes(2);
+      expect(reply.mock.calls[1]?.[0].turns.at(-1)).toEqual({
+        role: 'user',
+        content: '¿y el horario?',
+      });
+    });
+
+    it('does not answer if a person takes the chat during the wait', async () => {
+      await turnOn();
+      await deliver(sentAt('hola', 'wamid.A', 0));
+      await getTestDb()
+        .update(whatsappConversations)
+        .set({ assignedTo: '11111111-1111-1111-1111-111111111111' });
+
+      expect(await sweepAfter(8)).toBe(1);
+
+      expect(reply).not.toHaveBeenCalled();
+      expect(sendText).not.toHaveBeenCalled();
+      expect(sendTypingIndicator).not.toHaveBeenCalled();
+      // Nothing left waiting: the turn ended, it just had nothing to say.
+      expect(await pendingRows()).toEqual([]);
+    });
+
+    it('does not answer if the assistant is switched off during the wait', async () => {
+      await turnOn();
+      await deliver(sentAt('hola', 'wamid.A', 0));
+      await getTestDb().update(assistantSettings).set({ enabled: false });
+
+      await sweepAfter(8);
+
+      expect(reply).not.toHaveBeenCalled();
+      expect(sendText).not.toHaveBeenCalled();
+    });
+
+    it('waits as long as the settings say, read when the message arrives', async () => {
+      await getTestDb()
+        .insert(assistantSettings)
+        .values({ enabled: true, debounceSeconds: 3, maxWaitSeconds: 10 });
+
+      await deliver(sentAt('hola', 'wamid.A', 0));
+
+      expect(await sweepAfter(2)).toBe(0);
+      expect(await sweepAfter(1)).toBe(1);
+      expect(sendText).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows "escribiendo" on the customer\'s last message before the reply', async () => {
+      await turnOn();
+      await deliver(sentAt('hola', 'wamid.A', 0));
+      await deliver(sentAt('¿dónde queda Catia?', 'wamid.B', 2));
+
+      await sweepAfter(8);
+
+      expect(sendTypingIndicator).toHaveBeenCalledWith('wamid.B');
+      expect(sendTypingIndicator.mock.invocationCallOrder[0]).toBeLessThan(
+        sendText.mock.invocationCallOrder[0] ?? 0
+      );
+    });
+
+    it('hands over once a batch with an image among the texts', async () => {
+      await turnOn();
+      await deliver(sentAt('mira esta foto', 'wamid.A', 0));
+      await deliver(
+        customerMessage('wamid.IMG', {
+          type: 'image',
+          image: { id: 'media-1', mime_type: 'image/jpeg' },
+          timestamp: String(CUSTOMER_SENT_AT + 1),
+        })
+      );
+
+      await sweepAfter(9);
+
+      expect(reply).not.toHaveBeenCalled();
+      expect(sendText).toHaveBeenCalledTimes(1);
+      expect(sendText).toHaveBeenCalledWith('584140000001', HANDOFF_NOTICE);
+      const [run] = await getTestDb().select().from(assistantRuns);
+      expect(run).toMatchObject({ outcome: 'handoff', reason: 'non_text' });
+      expect(run?.inboundMessageIds).toHaveLength(2);
     });
   });
 });

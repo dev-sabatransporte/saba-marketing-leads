@@ -5,10 +5,10 @@ export type TurnResult =
   | 'answered'
   | 'handoff';
 
-export interface HandleInboundMessagePort {
+export interface RunAssistantTurnPort {
+  /** Answers the customer messages of a batch, once their wait is over. */
   execute(input: {
     conversationId: string;
-    messageId: string;
-    type: string;
+    messageIds: string[];
   }): Promise<TurnResult>;
 }

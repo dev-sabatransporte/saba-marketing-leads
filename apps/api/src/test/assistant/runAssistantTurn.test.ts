@@ -5,7 +5,7 @@ import type {
 } from '../../modules/assistant/application/ports/out/AssistantModelPort';
 import type { ChannelChat } from '../../modules/assistant/application/ports/out/ChatChannelPort';
 import type { StoresSnapshot } from '../../modules/assistant/application/ports/out/StoresSourcePort';
-import { HandleInboundMessageUseCase } from '../../modules/assistant/application/use-cases/HandleInboundMessageUseCase';
+import { RunAssistantTurnUseCase } from '../../modules/assistant/application/use-cases/RunAssistantTurnUseCase';
 import {
   CatalogUnavailableError,
   ModelUnavailableError,
@@ -49,6 +49,13 @@ const SEARCH: ModelReply = {
   model: 'claude-sonnet-5-5',
   usage: USAGE,
 };
+const IMAGE = {
+  id: 'img-1',
+  source: 'customer',
+  type: 'image',
+  body: null,
+  status: null,
+} as const;
 const CHAT: ChannelChat = {
   waId: '584140000001',
   lastInboundAt: new Date(NOW.getTime() - 60_000),
@@ -106,7 +113,8 @@ function setup({
   >;
 } = {}) {
   const requestHandoff = vi.fn(async (): Promise<void> => undefined);
-  const useCase = new HandleInboundMessageUseCase(
+  const showTyping = vi.fn(async (_id: string): Promise<void> => undefined);
+  const useCase = new RunAssistantTurnUseCase(
     {
       get: async () => ({
         ...DEFAULT_ASSISTANT_SETTINGS,
@@ -119,7 +127,7 @@ function setup({
       read: vi.fn(async () => chatWhenSending).mockResolvedValueOnce(chat),
       sendAsAssistant: send,
       requestHandoff,
-      showTyping: vi.fn(async (): Promise<void> => undefined),
+      showTyping,
     },
     { current: async () => stores },
     { search },
@@ -127,8 +135,8 @@ function setup({
     { record, countReplies },
     { now: () => NOW }
   );
-  const turn = (messageId = 'in-2', type = 'text') =>
-    useCase.execute({ conversationId: 'c-1', messageId, type });
+  const turn = (messageIds = ['in-1', 'in-2']) =>
+    useCase.execute({ conversationId: 'c-1', messageIds });
   return {
     turn,
     reply,
@@ -137,19 +145,25 @@ function setup({
     record,
     countReplies,
     requestHandoff,
+    showTyping,
   };
 }
 
-describe('HandleInboundMessageUseCase', () => {
-  it('answers once and records the turn', async () => {
-    const { turn, send, record, requestHandoff } = setup();
+describe('RunAssistantTurnUseCase', () => {
+  it('answers all the messages of the batch once and records the turn', async () => {
+    const { turn, send, record, requestHandoff, reply } = setup();
 
     expect(await turn()).toBe('answered');
+    expect(vi.mocked(reply).mock.calls[0]?.[0].turns).toEqual([
+      { role: 'user', content: 'hola\n¿dónde queda Catia?' },
+    ]);
+    expect(send).toHaveBeenCalledTimes(1);
     expect(send).toHaveBeenCalledWith('c-1', ANSWER_TEXT);
     expect(requestHandoff).not.toHaveBeenCalled();
+    expect(record).toHaveBeenCalledTimes(1);
     expect(record).toHaveBeenCalledWith(
       expect.objectContaining({
-        inboundMessageIds: ['in-2'],
+        inboundMessageIds: ['in-1', 'in-2'],
         sentMessageId: 'out-1',
         outcome: 'answered',
         usage: USAGE,
@@ -260,14 +274,6 @@ describe('HandleInboundMessageUseCase', () => {
     );
   });
 
-  it('leaves an older message to the turn of the newest one', async () => {
-    const { turn, reply, record } = setup();
-
-    expect(await turn('in-1')).toBe('ignored');
-    expect(reply).not.toHaveBeenCalled();
-    expect(record).not.toHaveBeenCalled();
-  });
-
   it('stays silent while the chat waits for a person', async () => {
     const { turn, reply, send } = setup({
       chat: { ...CHAT, handoffRequestedAt: NOW },
@@ -297,11 +303,12 @@ describe('HandleInboundMessageUseCase', () => {
   });
 
   it('stays silent with a person on it even for an image', async () => {
-    const { turn, requestHandoff } = setup({
-      chat: { ...CHAT, personReplied: true },
+    const { turn, requestHandoff, showTyping } = setup({
+      chat: { ...CHAT, personReplied: true, messages: [IMAGE] },
     });
 
-    expect(await turn('in-2', 'image')).toBe('ignored');
+    expect(await turn(['img-1'])).toBe('ignored');
+    expect(showTyping).not.toHaveBeenCalled();
     expect(requestHandoff).not.toHaveBeenCalled();
   });
 
@@ -390,32 +397,45 @@ describe('HandleInboundMessageUseCase', () => {
   });
 
   it('hands over a message that is not text without asking the model', async () => {
-    const chat: ChannelChat = {
-      ...CHAT,
-      messages: [
-        {
-          id: 'img-1',
-          source: 'customer',
-          type: 'image',
-          body: null,
-          status: null,
-        },
-      ],
-    };
-    const { turn, reply, requestHandoff } = setup({ chat });
+    const { turn, reply, requestHandoff, showTyping } = setup({
+      chat: { ...CHAT, messages: [IMAGE] },
+    });
 
-    expect(await turn('img-1', 'image')).toBe('handoff');
+    expect(await turn(['img-1'])).toBe('handoff');
     expect(reply).not.toHaveBeenCalled();
+    expect(showTyping).not.toHaveBeenCalled();
     expect(requestHandoff).toHaveBeenCalledWith('c-1', 'non_text');
   });
 
-  it('ignores a reaction: nothing to answer or hand over', async () => {
-    const { turn, reply, requestHandoff, send } = setup();
+  it('hands over a batch with an image among the texts', async () => {
+    const { turn, reply, requestHandoff, record } = setup({
+      chat: { ...CHAT, messages: [...CHAT.messages, IMAGE] },
+    });
 
-    expect(await turn('react-1', 'reaction')).toBe('ignored');
+    expect(await turn(['in-1', 'in-2', 'img-1'])).toBe('handoff');
     expect(reply).not.toHaveBeenCalled();
-    expect(requestHandoff).not.toHaveBeenCalled();
-    expect(send).not.toHaveBeenCalled();
+    expect(requestHandoff).toHaveBeenCalledWith('c-1', 'non_text');
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({ inboundMessageIds: ['in-1', 'in-2', 'img-1'] })
+    );
+  });
+
+  it('shows it is typing before asking the model', async () => {
+    const order: string[] = [];
+    const { turn, showTyping } = setup({
+      reply: vi.fn(async (): Promise<ModelReply> => {
+        order.push('model');
+        return ANSWER;
+      }),
+    });
+    showTyping.mockImplementation(async () => {
+      order.push('typing');
+    });
+
+    await turn();
+
+    expect(showTyping).toHaveBeenCalledWith('c-1');
+    expect(order).toEqual(['typing', 'model']);
   });
 
   it('sends no notice if the chat could not be marked', async () => {
@@ -596,11 +616,12 @@ describe('HandleInboundMessageUseCase', () => {
 
     it("stays silent for a message that is not text too once the day's limit is reached", async () => {
       const { turn, send } = setup({
+        chat: { ...CHAT, messages: [IMAGE] },
         countReplies: counting(300, 0),
         limits: { dailyReplyLimit: 300 },
       });
 
-      expect(await turn('in-2', 'image')).toBe('daily_limit');
+      expect(await turn(['img-1'])).toBe('daily_limit');
       expect(send).not.toHaveBeenCalled();
     });
   });

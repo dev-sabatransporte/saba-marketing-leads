@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   type ChatLine,
-  isLatestCustomerMessage,
   toModelTurns,
   withinReplyWindow,
 } from '../../modules/assistant/domain/conversation';
@@ -253,25 +252,6 @@ describe('mentionsAnAmount', () => {
     'La sede de Catia queda en la calle 5, local 12.',
   ])('lets "%s" through', (text) => {
     expect(mentionsAnAmount(text)).toBe(false);
-  });
-});
-
-describe('isLatestCustomerMessage', () => {
-  it('is true only for the customer last message', () => {
-    const first = line('customer', 'hola');
-    const second = line('customer', '¿dónde queda Catia?');
-    const lines = [first, second, line('assistant', 'Hola')];
-
-    expect(isLatestCustomerMessage(lines, second.id)).toBe(true);
-    expect(isLatestCustomerMessage(lines, first.id)).toBe(false);
-    expect(isLatestCustomerMessage([], first.id)).toBe(false);
-  });
-
-  it('ignores a reaction that came after the question', () => {
-    const question = line('customer', '¿dónde queda Catia?');
-    const lines = [question, line('customer', null, 'reaction')];
-
-    expect(isLatestCustomerMessage(lines, question.id)).toBe(true);
   });
 });
 
