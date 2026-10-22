@@ -15,6 +15,7 @@ import {
   type Store,
 } from '../../modules/assistant/domain/instructions';
 import { withMapLinks } from '../../modules/assistant/domain/mapLinks';
+import { addToBatch } from '../../modules/assistant/domain/pendingReply';
 import {
   contactWindowStart,
   startOfVenezuelanDay,
@@ -392,5 +393,42 @@ describe('reply limits', () => {
     expect(contactWindowStart(new Date('2026-10-22T15:00:00Z'))).toEqual(
       new Date('2026-10-21T15:00:00Z')
     );
+  });
+});
+
+describe('addToBatch', () => {
+  const WAIT = { debounceSeconds: 8, maxWaitSeconds: 30 };
+  const EMPTY = { messageIds: [], firstPendingAt: null, dueAt: null };
+  const at = (seconds: number) =>
+    new Date(Date.parse('2026-10-22T15:00:00Z') + seconds * 1000);
+
+  it('starts a batch and answers it 8 s after the message', () => {
+    expect(addToBatch(EMPTY, 'm1', at(0), WAIT)).toEqual({
+      messageIds: ['m1'],
+      firstPendingAt: at(0),
+      dueAt: at(8),
+    });
+  });
+
+  it('each new message restarts the wait', () => {
+    const first = addToBatch(EMPTY, 'm1', at(0), WAIT);
+    expect(addToBatch(first, 'm2', at(5), WAIT)).toEqual({
+      messageIds: ['m1', 'm2'],
+      firstPendingAt: at(0),
+      dueAt: at(13),
+    });
+  });
+
+  it('never waits more than 30 s after the first pending message', () => {
+    let batch = addToBatch(EMPTY, 'm0', at(0), WAIT);
+    for (const second of [7, 14, 21, 28]) {
+      batch = addToBatch(batch, `m${second}`, at(second), WAIT);
+    }
+    expect(batch.dueAt).toEqual(at(30));
+  });
+
+  it('ignores a message it already has (Meta resends webhooks)', () => {
+    const first = addToBatch(EMPTY, 'm1', at(0), WAIT);
+    expect(addToBatch(first, 'm1', at(5), WAIT)).toBe(first);
   });
 });
