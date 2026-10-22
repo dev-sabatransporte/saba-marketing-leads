@@ -24,8 +24,16 @@ export class DrizzlePendingRepliesRepository
     wait: ReplyWait
   ): Promise<void> {
     await this.db.transaction(async (tx) => {
-      // The row first, so two messages of a new chat lock the same one.
-      await tx.insert(pending).values({ conversationId }).onConflictDoNothing();
+      // The row first, locked by the insert itself: an existing one is
+      // "updated" to itself. DO NOTHING would not lock it, and a release
+      // could delete the empty row before the select below, losing the message.
+      await tx
+        .insert(pending)
+        .values({ conversationId })
+        .onConflictDoUpdate({
+          target: pending.conversationId,
+          set: { conversationId: sql`excluded.conversation_id` },
+        });
       const [row] = await tx
         .select({
           messageIds: pending.messageIds,
@@ -35,7 +43,7 @@ export class DrizzlePendingRepliesRepository
         .from(pending)
         .where(eq(pending.conversationId, conversationId))
         .for('update');
-      if (!row) return;
+      if (!row) throw new Error(`sin fila en la cola para ${conversationId}`);
       await tx
         .update(pending)
         .set(addToBatch(row, messageId, now, wait))
