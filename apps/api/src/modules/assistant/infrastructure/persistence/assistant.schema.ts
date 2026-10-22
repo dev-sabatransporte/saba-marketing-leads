@@ -89,3 +89,25 @@ export const assistantRuns = pgTable(
     index('assistant_runs_created_idx').on(table.createdAt),
   ]
 );
+
+/**
+ * The customer messages a chat is waiting to have answered, one row per
+ * conversation. Lives in the database so the wait survives a restart. The
+ * sweep moves `message_ids` to `claimed_ids` when `due_at` passes; messages
+ * that arrive while a turn runs start the next batch, which waits for that
+ * turn to finish. A claim older than the lease is taken again (the API died
+ * mid-turn).
+ */
+export const assistantPendingReplies = pgTable(
+  'assistant_pending_replies',
+  {
+    // A `whatsapp_conversations` id, without FK: that table belongs to `whatsapp`.
+    conversationId: uuid('conversation_id').primaryKey(),
+    messageIds: uuid('message_ids').array().notNull().default(sql`'{}'`),
+    firstPendingAt: timestamp('first_pending_at', { withTimezone: true }),
+    dueAt: timestamp('due_at', { withTimezone: true }),
+    claimedIds: uuid('claimed_ids').array().notNull().default(sql`'{}'`),
+    claimedAt: timestamp('claimed_at', { withTimezone: true }),
+  },
+  (table) => [index('assistant_pending_replies_due_idx').on(table.dueAt)]
+);

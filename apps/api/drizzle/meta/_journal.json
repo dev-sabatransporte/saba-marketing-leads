@@ -57,6 +57,13 @@
       "when": 1792616644751,
       "tag": "0007_assistant_settings_changes",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792698331173,
+      "tag": "0008_assistant_pending_replies",
+      "breakpoints": true
     }
   ]
 }
