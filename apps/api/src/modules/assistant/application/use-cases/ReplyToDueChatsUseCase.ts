@@ -9,7 +9,7 @@ import type { PendingRepliesRepositoryPort } from '../ports/out/PendingRepliesRe
 // older than this one belongs to an API that died mid-turn.
 const CLAIM_LEASE_MS = 2 * 60 * 1000;
 // Each turn waits on the model: a busy minute should not queue chats behind it.
-const BATCH_SIZE = 10;
+const MAX_CHATS_PER_SWEEP = 10;
 
 @Injectable()
 export class ReplyToDueChatsUseCase implements ReplyToDueChatsPort {
@@ -26,7 +26,7 @@ export class ReplyToDueChatsUseCase implements ReplyToDueChatsPort {
     const batches = await this.pending.claimDue({
       now,
       staleBefore: new Date(now.getTime() - CLAIM_LEASE_MS),
-      limit: BATCH_SIZE,
+      limit: MAX_CHATS_PER_SWEEP,
     });
     const results = await Promise.allSettled(
       batches.map(async (batch) => {
@@ -42,8 +42,13 @@ export class ReplyToDueChatsUseCase implements ReplyToDueChatsPort {
         }
       })
     );
-    const failed = results.find((r) => r.status === 'rejected');
-    if (failed) throw failed.reason;
+    const failed = results.find(
+      (r): r is PromiseRejectedResult => r.status === 'rejected'
+    );
+    if (failed) {
+      const error: unknown = failed.reason;
+      throw error;
+    }
     return batches.length;
   }
 }

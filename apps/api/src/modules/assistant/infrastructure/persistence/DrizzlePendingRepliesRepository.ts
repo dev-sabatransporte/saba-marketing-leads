@@ -5,6 +5,7 @@ import {
   DRIZZLE_CLIENT,
 } from '../../../../infrastructure/database/drizzle.module';
 import type {
+  ClaimDueInput,
   ClaimedBatch,
   PendingRepliesRepositoryPort,
 } from '../../application/ports/out/PendingRepliesRepositoryPort';
@@ -55,11 +56,7 @@ export class DrizzlePendingRepliesRepository
     now,
     staleBefore,
     limit,
-  }: {
-    now: Date;
-    staleBefore: Date;
-    limit: number;
-  }): Promise<ClaimedBatch[]> {
+  }: ClaimDueInput): Promise<ClaimedBatch[]> {
     return this.db.transaction(async (tx) => {
       const due = await tx
         .select({ conversationId: pending.conversationId })
@@ -79,6 +76,7 @@ export class DrizzlePendingRepliesRepository
         .update(pending)
         .set({
           // A claim taken back answers its messages together with the new ones.
+          // Raw: the builder has no array concatenation between columns.
           claimedIds: sql`${pending.claimedIds} || ${pending.messageIds}`,
           messageIds: sql`'{}'`,
           firstPendingAt: null,
@@ -121,15 +119,14 @@ export class DrizzlePendingRepliesRepository
             eq(pending.claimedAt, claimedAt)
           )
         );
-      await tx
-        .delete(pending)
-        .where(
-          and(
-            eq(pending.conversationId, conversationId),
-            isNull(pending.claimedAt),
-            sql`cardinality(${pending.messageIds}) = 0`
-          )
-        );
+      await tx.delete(pending).where(
+        and(
+          eq(pending.conversationId, conversationId),
+          isNull(pending.claimedAt),
+          // Raw: the builder has no operator for an empty array.
+          sql`cardinality(${pending.messageIds}) = 0`
+        )
+      );
     });
   }
 }
