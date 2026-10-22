@@ -7,6 +7,7 @@ const LIST_REFRESH_MS = 10_000;
 export const chatsQueryKeys = {
   all: () => ['chats'] as const,
   conversations: () => [...chatsQueryKeys.all(), 'conversations'] as const,
+  dailyLimit: () => [...chatsQueryKeys.all(), 'dailyLimit'] as const,
   messages: (conversationId: string) =>
     [...chatsQueryKeys.all(), 'messages', conversationId] as const,
 };

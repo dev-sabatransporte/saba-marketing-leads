@@ -6,6 +6,7 @@ import React from 'react';
 import { useConversations } from '../../application/queries/useConversations.query';
 import { ConversationList } from '../widgets/ConversationList';
 import { ConversationThread } from '../widgets/ConversationThread';
+import { DailyLimitNotice } from '../widgets/DailyLimitNotice';
 
 /**
  * From `md`: list on the left and thread on the right. Narrower: one thing at
@@ -31,6 +32,7 @@ export function ChatsPage(): React.JSX.Element {
             Conversaciones de WhatsApp con los clientes de Saba.
           </p>
         </header>
+        <DailyLimitNotice />
         <ConversationList selectedId={selectedId} onSelect={setSelectedId} />
       </aside>
       {selected ? (

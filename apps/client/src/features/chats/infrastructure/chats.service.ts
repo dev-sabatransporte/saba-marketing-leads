@@ -2,7 +2,7 @@ import type { TSendMessage } from '@repo/schemas';
 import type { Safe } from '@repo/utils';
 import type { Conversation, Message } from '../domain/chat.model';
 import type { ChatSabaCustomers } from '../domain/sabaCustomer.model';
-import type { ChatsApi } from './chats.interfaces';
+import type { AssistantStatusApi, ChatsApi } from './chats.interfaces';
 import {
   toConversationDomain,
   toMessageDomain,
@@ -15,7 +15,10 @@ function data<T>(result: Safe<T>): T {
 }
 
 export class ChatsServiceClass {
-  constructor(private chatsApi: ChatsApi) {}
+  constructor(
+    private chatsApi: ChatsApi,
+    private assistantApi: AssistantStatusApi
+  ) {}
 
   async listConversations(): Promise<Conversation[]> {
     return data(await this.chatsApi.listConversations()).map(
@@ -54,5 +57,10 @@ export class ChatsServiceClass {
     return toSabaCustomerDomain(
       data(await this.chatsApi.getSabaCustomer(conversationId))
     );
+  }
+
+  /** Whether the assistant stopped answering for today. */
+  async isDailyLimitReached(): Promise<boolean> {
+    return data(await this.assistantApi.getDailyLimit()).reached;
   }
 }

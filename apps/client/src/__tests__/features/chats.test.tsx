@@ -34,6 +34,36 @@ describe('ChatsPage', () => {
     expect(within(list).getByText('+58 424 999 9999')).toBeInTheDocument();
   });
 
+  it('warns above the list when the assistant reached its daily limit', async () => {
+    server.use(
+      http.get(`${BACKEND_URL}/v1/assistant/daily-limit`, () =>
+        HttpResponse.json({ success: true, data: { reached: true } })
+      )
+    );
+    render(<ChatsPage />);
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'El asistente alcanzó el límite diario y se reanuda mañana; los chats nuevos los atienden ustedes'
+    );
+  });
+
+  it('shows no warning while the assistant has replies left today', async () => {
+    let asked = false;
+    server.use(
+      http.get(`${BACKEND_URL}/v1/assistant/daily-limit`, () => {
+        asked = true;
+        return HttpResponse.json({ success: true, data: { reached: false } });
+      })
+    );
+    render(<ChatsPage />);
+
+    await screen.findByRole('navigation', { name: 'Conversaciones' });
+    await waitFor(() => expect(asked).toBe(true));
+    expect(
+      screen.queryByText(/alcanzó el límite diario/)
+    ).not.toBeInTheDocument();
+  });
+
   it('marks the chats the assistant handed over as needing an agent', async () => {
     server.use(
       http.get(base, () =>

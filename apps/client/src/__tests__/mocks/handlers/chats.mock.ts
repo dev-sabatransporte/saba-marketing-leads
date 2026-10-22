@@ -98,6 +98,9 @@ export const sabaCustomerFixture: TSabaCustomer = {
 };
 
 export const chatsHandlers = [
+  http.get(`${BACKEND_URL}/v1/assistant/daily-limit`, () =>
+    HttpResponse.json({ success: true, data: { reached: false } })
+  ),
   http.get(`${base}/:id/saba-customer`, () =>
     HttpResponse.json({
       success: true,

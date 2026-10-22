@@ -1,5 +1,7 @@
 import {
+  assistantDailyLimitResponseSchema,
   assistantSettingsResponseSchema,
+  type TAssistantDailyLimit,
   type TAssistantSettings,
   type TUpdateAssistantSettings,
 } from '@repo/schemas';
@@ -33,6 +35,17 @@ export class AssistantService {
       undefined,
       options,
       assistantSettingsResponseSchema
+    );
+  }
+
+  async getDailyLimit(
+    options?: HttpRequestOptions
+  ): Promise<Safe<TAssistantDailyLimit>> {
+    return await this.httpClient.get(
+      `${this.basePath}/daily-limit`,
+      undefined,
+      options,
+      assistantDailyLimitResponseSchema
     );
   }
 }
