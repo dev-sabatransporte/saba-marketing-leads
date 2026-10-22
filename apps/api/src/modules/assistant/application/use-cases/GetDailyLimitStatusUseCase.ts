@@ -1,7 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { startOfVenezuelanDay } from '../../domain/replyLimits';
 import { ASSISTANT_TOKENS } from '../../tokens';
-import type { DailyLimitStatusPort } from '../ports/in/DailyLimitStatusPort';
+import type {
+  DailyLimitStatus,
+  GetDailyLimitStatusPort,
+} from '../ports/in/GetDailyLimitStatusPort';
 import type { AssistantRunsRepositoryPort } from '../ports/out/AssistantRunsRepositoryPort';
 import type { AssistantSettingsRepositoryPort } from '../ports/out/AssistantSettingsRepositoryPort';
 import type { ClockPort } from '../ports/out/ClockPort';
@@ -11,7 +14,7 @@ import type { ClockPort } from '../ports/out/ClockPort';
  * exactly while the assistant stays silent for the day's limit.
  */
 @Injectable()
-export class GetDailyLimitStatusUseCase implements DailyLimitStatusPort {
+export class GetDailyLimitStatusUseCase implements GetDailyLimitStatusPort {
   constructor(
     @Inject(ASSISTANT_TOKENS.Settings)
     private readonly settings: AssistantSettingsRepositoryPort,
@@ -20,7 +23,7 @@ export class GetDailyLimitStatusUseCase implements DailyLimitStatusPort {
     @Inject(ASSISTANT_TOKENS.Clock) private readonly clock: ClockPort
   ) {}
 
-  async execute(): Promise<{ reached: boolean }> {
+  async execute(): Promise<DailyLimitStatus> {
     const { enabled, dailyReplyLimit } = await this.settings.get();
     // Off, it answers nobody anyway: "se reanuda mañana" would be wrong.
     if (!enabled) return { reached: false };

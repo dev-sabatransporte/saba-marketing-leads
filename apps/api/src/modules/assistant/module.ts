@@ -64,7 +64,7 @@ import { ASSISTANT_TOKENS } from './tokens';
     },
     GetDailyLimitStatusUseCase,
     {
-      provide: ASSISTANT_TOKENS.DailyLimitStatus,
+      provide: ASSISTANT_TOKENS.GetDailyLimitStatus,
       useExisting: GetDailyLimitStatusUseCase,
     },
   ],

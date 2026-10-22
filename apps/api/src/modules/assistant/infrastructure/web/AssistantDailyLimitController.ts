@@ -6,16 +6,17 @@ import {
 } from '@repo/schemas';
 import { RequirePermissions } from '../../../../shared/decorators/RequirePermissions';
 import { ZodApiResponse } from '../../../../shared/decorators/zodSwagger';
-import type { DailyLimitStatusPort } from '../../application/ports/in/DailyLimitStatusPort';
+import type { GetDailyLimitStatusPort } from '../../application/ports/in/GetDailyLimitStatusPort';
 import { ASSISTANT_TOKENS } from '../../tokens';
+import { toAssistantDailyLimitResponse } from './AssistantDailyLimitPresenter';
 
 @ApiTags('assistant')
 @RequirePermissions({ permissions: ['marketing:access'] })
 @Controller('assistant/daily-limit')
 export class AssistantDailyLimitController {
   constructor(
-    @Inject(ASSISTANT_TOKENS.DailyLimitStatus)
-    private readonly dailyLimit: DailyLimitStatusPort
+    @Inject(ASSISTANT_TOKENS.GetDailyLimitStatus)
+    private readonly getDailyLimit: GetDailyLimitStatusPort
   ) {}
 
   @Get()
@@ -26,6 +27,6 @@ export class AssistantDailyLimitController {
   })
   @ZodApiResponse(HttpStatus.OK, assistantDailyLimitResponseSchema)
   async read(): Promise<TAssistantDailyLimitResponse> {
-    return { success: true, data: await this.dailyLimit.execute() };
+    return toAssistantDailyLimitResponse(await this.getDailyLimit.execute());
   }
 }
