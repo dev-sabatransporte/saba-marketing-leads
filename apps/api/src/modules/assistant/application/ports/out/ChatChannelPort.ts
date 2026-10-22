@@ -33,4 +33,6 @@ export interface ChatChannelPort {
   ): Promise<{ id: string }>;
   /** Marks the chat "Necesita asesor", without assigning it to anyone. */
   requestHandoff(conversationId: string, reason: HandoffReason): Promise<void>;
+  /** "Escribiendo…" while the reply is generated; never throws for Meta. */
+  showTyping(conversationId: string): Promise<void>;
 }

@@ -4,6 +4,7 @@ import type {
   AssistantChat,
 } from '../../application/ports/in/AssistantChannelPort';
 import type { ReplyToConversationPort } from '../../application/ports/in/ReplyToConversationPort';
+import type { SendTypingIndicatorPort } from '../../application/ports/in/SendTypingIndicatorPort';
 import type { ChatsRepositoryPort } from '../../application/ports/out/ChatsRepositoryPort';
 import type { ClockPort } from '../../application/ports/out/ClockPort';
 import type { ChatMessage } from '../../domain/Chats';
@@ -17,6 +18,8 @@ export class WhatsAppAssistantChannel implements AssistantChannelPort {
     private readonly chats: ChatsRepositoryPort,
     @Inject(WHATSAPP_TOKENS.ReplyToConversation)
     private readonly reply: ReplyToConversationPort,
+    @Inject(WHATSAPP_TOKENS.SendTypingIndicator)
+    private readonly typing: SendTypingIndicatorPort,
     @Inject(WHATSAPP_TOKENS.Clock) private readonly clock: ClockPort
   ) {}
 
@@ -43,5 +46,9 @@ export class WhatsAppAssistantChannel implements AssistantChannelPort {
 
   requestHandoff(conversationId: string, reason: string): Promise<void> {
     return this.chats.requestHandoff(conversationId, reason, this.clock.now());
+  }
+
+  showTyping(conversationId: string): Promise<void> {
+    return this.typing.execute(conversationId);
   }
 }

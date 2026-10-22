@@ -119,6 +119,7 @@ function setup({
       read: vi.fn(async () => chatWhenSending).mockResolvedValueOnce(chat),
       sendAsAssistant: send,
       requestHandoff,
+      showTyping: vi.fn(async (): Promise<void> => undefined),
     },
     { current: async () => stores },
     { search },

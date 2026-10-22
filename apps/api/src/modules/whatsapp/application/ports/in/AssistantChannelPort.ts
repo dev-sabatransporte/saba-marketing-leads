@@ -18,7 +18,7 @@ export interface AssistantChat {
 
 /**
  * The only thing the `assistant` module sees of WhatsApp: read a chat and send
- * in it as the assistant. It never touches the tables of this module.
+ * in it as the assistant, showing it is typing meanwhile. It never touches the tables of this module.
  */
 export interface AssistantChannelPort {
   /** `null` if the conversation does not exist. */
@@ -30,4 +30,6 @@ export interface AssistantChannelPort {
   sendAsAssistant(conversationId: string, body: string): Promise<ChatMessage>;
   /** Marks the chat "Necesita asesor", without assigning it to anyone. */
   requestHandoff(conversationId: string, reason: string): Promise<void>;
+  /** "Escribiendo…" on the customer's last message; never throws for Meta. */
+  showTyping(conversationId: string): Promise<void>;
 }

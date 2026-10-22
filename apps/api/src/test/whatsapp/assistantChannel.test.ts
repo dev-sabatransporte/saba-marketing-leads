@@ -1,6 +1,8 @@
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ReplyToConversationUseCase } from '../../modules/whatsapp/application/use-cases/ReplyToConversationUseCase';
+import { SendTypingIndicatorUseCase } from '../../modules/whatsapp/application/use-cases/SendTypingIndicatorUseCase';
+import { MetaSendError } from '../../modules/whatsapp/domain/Chats';
 import { WindowClosedException } from '../../modules/whatsapp/domain/exceptions/whatsappExceptions';
 import { WhatsAppAssistantChannel } from '../../modules/whatsapp/infrastructure/assistant/WhatsAppAssistantChannel';
 import { DrizzleChatsRepository } from '../../modules/whatsapp/infrastructure/persistence/DrizzleChatsRepository';
@@ -16,18 +18,20 @@ const TEN_MINUTES_AGO = new Date(NOW.getTime() - 10 * 60 * 1000);
 const TWO_DAYS_AGO = new Date(NOW.getTime() - 48 * 60 * 60 * 1000);
 
 const sendText = vi.fn<(to: string, body: string) => Promise<string>>();
+const sendTypingIndicator = vi.fn<(wamid: string) => Promise<void>>();
 
 function channel(): WhatsAppAssistantChannel {
   const chats = new DrizzleChatsRepository(getTestDb());
   const cloud = {
     sendText,
     downloadMedia: vi.fn(),
-    sendTypingIndicator: vi.fn(),
+    sendTypingIndicator,
   };
   const clock = { now: () => NOW };
   return new WhatsAppAssistantChannel(
     chats,
     new ReplyToConversationUseCase(chats, cloud, clock),
+    new SendTypingIndicatorUseCase(chats, cloud, clock),
     clock
   );
 }
@@ -69,6 +73,24 @@ describe('WhatsAppAssistantChannel (against Postgres)', () => {
   beforeEach(async () => {
     await resetDatabase();
     sendText.mockReset();
+    sendTypingIndicator.mockReset().mockResolvedValue(undefined);
+  });
+
+  it('shows "escribiendo" on the customer\'s last message', async () => {
+    const conversationId = await createChat(TEN_MINUTES_AGO);
+
+    await channel().showTyping(conversationId);
+
+    expect(sendTypingIndicator).toHaveBeenCalledWith('wamid.IN');
+  });
+
+  it('a typing indicator Meta rejects never gets in the way of the reply', async () => {
+    const conversationId = await createChat(TEN_MINUTES_AGO);
+    sendTypingIndicator.mockRejectedValue(
+      new MetaSendError(131000, 'algo falló')
+    );
+
+    await expect(channel().showTyping(conversationId)).resolves.toBeUndefined();
   });
 
   it('reads the phone, the window and the recent messages of the chat', async () => {
