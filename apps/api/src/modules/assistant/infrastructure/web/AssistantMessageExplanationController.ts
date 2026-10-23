@@ -30,7 +30,7 @@ export class AssistantMessageExplanationController {
   @ApiOperation({
     summary: 'El "¿por qué?" de un mensaje del asistente',
     description:
-      'Sale de `assistant_runs`: qué buscó, cuántos resultados encontró y, si traspasó, el motivo. Nunca el razonamiento del modelo ni el detalle técnico de un error. 404 si el mensaje no lo envió el asistente o su registro ya se purgó (90 días).',
+      'Sale de `assistant_runs`: qué buscó, cuántos resultados encontró y, si traspasó, el motivo. Nunca el razonamiento del modelo ni el detalle técnico de un error. 404 si el mensaje no lo envió el asistente.',
   })
   @ZodApiResponse(HttpStatus.OK, assistantMessageExplanationResponseSchema)
   async read(

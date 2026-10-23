@@ -10,6 +10,7 @@ export function toAssistantMessageExplanationResponse(
       outcome: explanation.outcome,
       handoffReason:
         explanation.outcome === 'handoff' ? explanation.reason : null,
+      // Field by field: whatever a run stores later stays out unless added here.
       toolCalls: explanation.toolCalls.map(({ tool, query, resultCount }) => ({
         tool,
         query,
