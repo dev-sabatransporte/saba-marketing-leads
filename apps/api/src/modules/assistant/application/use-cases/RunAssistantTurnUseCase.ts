@@ -204,7 +204,7 @@ export class RunAssistantTurnUseCase implements RunAssistantTurnPort {
         ...decision.billed,
       });
     }
-    const { reply: reply, billed } = decision;
+    const { reply, billed } = decision;
     // The model takes seconds: a person may have taken the chat meanwhile.
     const latest = await this.channel.read(conversationId, HISTORY_LIMIT);
     if (!latest || aPersonHasTheChat(latest)) {

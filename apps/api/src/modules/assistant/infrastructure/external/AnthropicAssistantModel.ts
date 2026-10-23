@@ -44,7 +44,7 @@ const TRANSFER_REASONS = [...MODEL_HANDOFF_REASONS, 'pricing'] as const;
 const TRANSFER_TO_HUMAN = {
   name: 'transfer_to_human',
   description:
-    'Pasa la conversación a un asesor de Saba. Úsala en vez de responder cuando el cliente pide hablar con una persona, pregunta por precios, montos o financiamiento, pregunta algo fuera de productos, sedes y horarios, cuando un producto no aparece o no tiene stock, o cuando el dato no está en tus instrucciones ni en lo que devolvió search_products.',
+    'Pasa la conversación a un asesor de Saba. Úsala en vez de responder cuando el cliente pide hablar con una persona, pregunta algo fuera de productos, sedes y horarios, cuando un producto no aparece o no tiene stock, o cuando el dato no está en tus instrucciones ni en lo que devolvió search_products. Con pricing (pregunta por precios, montos o financiamiento) no se traspasa: el sistema le dice dónde ver los precios y sigues atendiendo.',
   input_schema: {
     type: 'object' as const,
     properties: {
@@ -240,12 +240,12 @@ export class AnthropicAssistantModel implements AssistantModelPort {
         : { kind: 'handoff', reason, ...billed };
     }
 
-    const fixed = response.content.flatMap((block) => {
-      const reply =
-        block.type === 'tool_use' ? FIXED_REPLY_TOOLS.get(block.name) : null;
-      return reply ? [reply] : [];
-    })[0];
-    if (fixed) return { kind: 'fixed', reply: fixed, ...billed };
+    const fixed = response.content.find(
+      (block) => block.type === 'tool_use' && FIXED_REPLY_TOOLS.has(block.name)
+    );
+    const fixedReply =
+      fixed?.type === 'tool_use' ? FIXED_REPLY_TOOLS.get(fixed.name) : null;
+    if (fixedReply) return { kind: 'fixed', reply: fixedReply, ...billed };
 
     const search = response.content.find(
       (block) =>
