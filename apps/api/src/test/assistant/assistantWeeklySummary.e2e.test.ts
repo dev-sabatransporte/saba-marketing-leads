@@ -161,6 +161,20 @@ describe('/assistant/weekly-summary', () => {
     });
   });
 
+  it('counts the fixed greeting, closing and prices texts as answers, not handoffs', async () => {
+    const chat = crypto.randomUUID();
+    await run(chat, { outcome: 'answered', reason: 'greeting' }, 3);
+    await run(chat, { outcome: 'answered', reason: 'pricing' }, 2);
+    await run(chat, { outcome: 'answered', reason: 'closing' }, 1);
+
+    const { body } = await summary('manager').expect(200);
+    expect(body.data).toMatchObject({
+      conversations: 1,
+      resolvedWithoutPerson: 1,
+      handoffsByReason: NO_HANDOFFS,
+    });
+  });
+
   it('estimates the cost of the week from the tokens, per model', async () => {
     const chat = crypto.randomUUID();
     // Sonnet 5.5: US$2 in, US$10 out, US$0.20 cache read, US$2.50 cache write per million.
