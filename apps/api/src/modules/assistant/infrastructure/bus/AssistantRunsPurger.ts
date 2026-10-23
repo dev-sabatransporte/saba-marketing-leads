@@ -26,9 +26,10 @@ export class AssistantRunsPurger
     private readonly logger: StructuredLogger
   ) {}
 
-  onApplicationBootstrap(): void {
-    // A deploy more often than every 6 h would otherwise never purge.
-    void this.pass();
+  async onApplicationBootstrap(): Promise<void> {
+    // A deploy more often than every 6 h would otherwise never purge. Awaited:
+    // a single indexed DELETE, and nothing races with it after startup.
+    await this.pass();
     this.timer = setInterval(() => void this.pass(), EVERY_MS);
     // Does not keep the process alive (tests, shutdown).
     this.timer.unref();

@@ -41,7 +41,15 @@ describe('purge of old assistant runs', () => {
     return row.id;
   }
 
+  let staleAtStartup = '';
+  let purgedAtStartup: string[] = [];
+
   beforeAll(async () => {
+    await resetDatabase();
+    const stale = await runDaysAgo(120);
+    staleAtStartup = stale;
+    const kept = await runDaysAgo(5);
+
     const moduleRef = await Test.createTestingModule({
       imports: [
         LoggingModule,
@@ -59,6 +67,13 @@ describe('purge of old assistant runs', () => {
     app = moduleRef.createNestApplication();
     await app.init();
     purge = app.get(ASSISTANT_TOKENS.PurgeOldRuns);
+
+    const left = await getTestDb()
+      .select({ id: assistantRuns.id })
+      .from(assistantRuns);
+    purgedAtStartup = [stale, kept].filter(
+      (id) => !left.some((row) => row.id === id)
+    );
   });
 
   afterAll(async () => {
@@ -68,6 +83,10 @@ describe('purge of old assistant runs', () => {
 
   beforeEach(async () => {
     await resetDatabase();
+  });
+
+  it('purges once the API has started, without waiting for the interval', () => {
+    expect(purgedAtStartup).toEqual([staleAtStartup]);
   });
 
   it('deletes the runs older than 90 days and keeps the rest', async () => {

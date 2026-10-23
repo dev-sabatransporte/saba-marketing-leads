@@ -103,6 +103,7 @@ export class DrizzleAssistantRunsRepository
     );
     // One row per chat the assistant spoke in (an answer or a handoff); an
     // `error` run means a person took it while the model was answering.
+    // `bool_or` in `sql`: the builder has no boolean aggregates.
     const chats = this.db
       .select({
         needsPerson:
