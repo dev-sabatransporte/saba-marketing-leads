@@ -15,7 +15,7 @@ export interface MessageExplanation {
 }
 
 // `limit_reached` keeps its Spanish code: the team already calls it that.
-const HANDOFF_REASONS: Record<HandoffReason, string> = {
+const HANDOFF_REASON_LABELS: Record<HandoffReason, string> = {
   out_of_scope: 'el tema no es de productos, sedes u horarios',
   customer_requested: 'el cliente pidió hablar con una persona',
   data_not_found: 'no encontró el dato',
@@ -29,7 +29,7 @@ const HANDOFF_REASONS: Record<HandoffReason, string> = {
 
 export function outcomeLabel(explanation: MessageExplanation): string {
   return explanation.handoffReason
-    ? `Traspasó a un asesor: ${HANDOFF_REASONS[explanation.handoffReason]}`
+    ? `Traspasó a un asesor: ${HANDOFF_REASON_LABELS[explanation.handoffReason]}`
     : 'Respondió al cliente';
 }
 

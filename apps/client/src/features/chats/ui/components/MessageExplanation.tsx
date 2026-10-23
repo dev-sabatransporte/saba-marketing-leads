@@ -14,7 +14,7 @@ export function MessageExplanation({
 }: {
   messageId: string;
 }): React.JSX.Element {
-  const { data, isPending, error } = useMessageExplanation(messageId, true);
+  const { data, isPending, error } = useMessageExplanation(messageId);
 
   return (
     <div className="mt-2 border-current/20 border-t pt-2 text-xs">

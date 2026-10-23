@@ -395,7 +395,7 @@ describe('ChatsPage', () => {
               success: false,
               code: 'ASSISTANT_MESSAGE_EXPLANATION_NOT_FOUND',
               error:
-                'No hay detalle de este mensaje: no lo envió el asistente o ya pasaron más de 90 días.',
+                'No hay detalle de este mensaje: no lo envió el asistente.',
             },
             { status: 404 }
           )
@@ -407,7 +407,7 @@ describe('ChatsPage', () => {
       );
 
       expect(await within(thread).findByRole('alert')).toHaveTextContent(
-        'ya pasaron más de 90 días'
+        'no lo envió el asistente'
       );
     });
   });
