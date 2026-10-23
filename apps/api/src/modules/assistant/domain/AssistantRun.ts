@@ -1,3 +1,5 @@
+import type { HandoffReason } from './handoff';
+
 export type RunOutcome = 'answered' | 'handoff' | 'error';
 
 export interface TokenUsage {
@@ -43,3 +45,11 @@ export interface NewAssistantRun {
   /** From the assistant's clock: the reply limits are counted against it. */
   createdAt: Date;
 }
+
+/**
+ * What the team sees behind a message the assistant sent: its searches and,
+ * if it handed over, why. Never the error detail: that is for operators.
+ */
+export type MessageExplanation =
+  | { outcome: 'answered'; toolCalls: ToolCall[] }
+  | { outcome: 'handoff'; reason: HandoffReason; toolCalls: ToolCall[] };

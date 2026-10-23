@@ -1,15 +1,12 @@
+import { ASSISTANT_HANDOFF_REASONS } from '@repo/schemas';
+
 /** Why the assistant hands a chat to a person (stored with the chat and the run). */
-export const HANDOFF_REASONS = [
-  'out_of_scope',
-  'customer_requested',
-  'data_not_found',
-  'non_text',
-  'pricing',
-  'out_of_stock',
-  'limit_reached',
-  'error',
-] as const;
+export const HANDOFF_REASONS = ASSISTANT_HANDOFF_REASONS;
 export type HandoffReason = (typeof HANDOFF_REASONS)[number];
+
+export function isHandoffReason(value: string | null): value is HandoffReason {
+  return HANDOFF_REASONS.some((reason) => reason === value);
+}
 
 /** The ones the model may choose; the rest are decided by code. */
 export const MODEL_HANDOFF_REASONS = [

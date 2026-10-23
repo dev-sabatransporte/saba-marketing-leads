@@ -1,4 +1,7 @@
-import type { NewAssistantRun } from '../../../domain/AssistantRun';
+import type {
+  MessageExplanation,
+  NewAssistantRun,
+} from '../../../domain/AssistantRun';
 
 export interface AssistantRunsRepositoryPort {
   record(run: NewAssistantRun): Promise<void>;
@@ -7,4 +10,6 @@ export interface AssistantRunsRepositoryPort {
     since: Date;
     conversationId?: string;
   }): Promise<number>;
+  /** From the run that sent this message; `null` if no run did. */
+  explainSentMessage(messageId: string): Promise<MessageExplanation | null>;
 }

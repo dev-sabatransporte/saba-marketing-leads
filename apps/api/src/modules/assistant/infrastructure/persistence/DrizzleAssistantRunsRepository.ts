@@ -1,11 +1,15 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, count, eq, gte } from 'drizzle-orm';
+import { and, count, desc, eq, gte } from 'drizzle-orm';
 import {
   type ApiDb,
   DRIZZLE_CLIENT,
 } from '../../../../infrastructure/database/drizzle.module';
 import type { AssistantRunsRepositoryPort } from '../../application/ports/out/AssistantRunsRepositoryPort';
-import type { NewAssistantRun } from '../../domain/AssistantRun';
+import type {
+  MessageExplanation,
+  NewAssistantRun,
+} from '../../domain/AssistantRun';
+import { isHandoffReason } from '../../domain/handoff';
 import { assistantRuns } from './assistant.schema';
 
 @Injectable()
@@ -53,5 +57,30 @@ export class DrizzleAssistantRunsRepository
         )
       );
     return row?.replies ?? 0;
+  }
+
+  async explainSentMessage(
+    messageId: string
+  ): Promise<MessageExplanation | null> {
+    const [row] = await this.db
+      .select({
+        outcome: assistantRuns.outcome,
+        reason: assistantRuns.reason,
+        toolCalls: assistantRuns.toolCalls,
+      })
+      .from(assistantRuns)
+      .where(eq(assistantRuns.sentMessageId, messageId))
+      .orderBy(desc(assistantRuns.createdAt))
+      .limit(1);
+    if (!row) return null;
+    const { toolCalls } = row;
+    if (row.outcome === 'answered') return { outcome: 'answered', toolCalls };
+    // Only answers and handoffs send a message; a reason outside the list
+    // would be an old row, shown as the generic one.
+    return {
+      outcome: 'handoff',
+      reason: isHandoffReason(row.reason) ? row.reason : 'error',
+      toolCalls,
+    };
   }
 }

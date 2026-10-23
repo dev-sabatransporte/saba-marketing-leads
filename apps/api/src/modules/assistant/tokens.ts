@@ -15,4 +15,5 @@ export const ASSISTANT_TOKENS = {
   GetSettings: Symbol('GetAssistantSettingsPort'),
   UpdateSettings: Symbol('UpdateAssistantSettingsPort'),
   GetDailyLimitStatus: Symbol('GetDailyLimitStatusPort'),
+  GetMessageExplanation: Symbol('GetMessageExplanationPort'),
 } as const;

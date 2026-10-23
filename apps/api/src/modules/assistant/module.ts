@@ -4,6 +4,7 @@ import { WhatsAppModule } from '../whatsapp/module';
 import { WHATSAPP_TOKENS } from '../whatsapp/tokens';
 import { GetAssistantSettingsUseCase } from './application/use-cases/GetAssistantSettingsUseCase';
 import { GetDailyLimitStatusUseCase } from './application/use-cases/GetDailyLimitStatusUseCase';
+import { GetMessageExplanationUseCase } from './application/use-cases/GetMessageExplanationUseCase';
 import { ReplyToDueChatsUseCase } from './application/use-cases/ReplyToDueChatsUseCase';
 import { RunAssistantTurnUseCase } from './application/use-cases/RunAssistantTurnUseCase';
 import { ScheduleReplyUseCase } from './application/use-cases/ScheduleReplyUseCase';
@@ -19,12 +20,17 @@ import { DrizzleAssistantRunsRepository } from './infrastructure/persistence/Dri
 import { DrizzleAssistantSettingsRepository } from './infrastructure/persistence/DrizzleAssistantSettingsRepository';
 import { DrizzlePendingRepliesRepository } from './infrastructure/persistence/DrizzlePendingRepliesRepository';
 import { AssistantDailyLimitController } from './infrastructure/web/AssistantDailyLimitController';
+import { AssistantMessageExplanationController } from './infrastructure/web/AssistantMessageExplanationController';
 import { AssistantSettingsController } from './infrastructure/web/AssistantSettingsController';
 import { ASSISTANT_TOKENS } from './tokens';
 
 @Module({
   imports: [WhatsAppModule],
-  controllers: [AssistantSettingsController, AssistantDailyLimitController],
+  controllers: [
+    AssistantSettingsController,
+    AssistantDailyLimitController,
+    AssistantMessageExplanationController,
+  ],
   providers: [
     {
       provide: ASSISTANT_TOKENS.Config,
@@ -82,6 +88,11 @@ import { ASSISTANT_TOKENS } from './tokens';
     {
       provide: ASSISTANT_TOKENS.GetDailyLimitStatus,
       useExisting: GetDailyLimitStatusUseCase,
+    },
+    GetMessageExplanationUseCase,
+    {
+      provide: ASSISTANT_TOKENS.GetMessageExplanation,
+      useExisting: GetMessageExplanationUseCase,
     },
   ],
 })

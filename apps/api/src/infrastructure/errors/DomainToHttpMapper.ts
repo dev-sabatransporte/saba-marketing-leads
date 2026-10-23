@@ -8,6 +8,7 @@ import type { DomainErrorCode } from '../i18n/domainMessages';
  */
 export const domainErrorHttpStatus: Record<DomainErrorCode, HttpStatus> = {
   ASSISTANT_MAX_WAIT_BELOW_DEBOUNCE: HttpStatus.BAD_REQUEST,
+  ASSISTANT_MESSAGE_EXPLANATION_NOT_FOUND: HttpStatus.NOT_FOUND,
   AUTH_INVALID_CREDENTIALS: HttpStatus.UNAUTHORIZED,
   AUTH_INVALID_CAPTCHA: HttpStatus.BAD_REQUEST,
   AUTH_TOO_MANY_ATTEMPTS: HttpStatus.TOO_MANY_REQUESTS,
