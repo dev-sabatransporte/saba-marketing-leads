@@ -1,5 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, count, desc, eq, gte, lt } from 'drizzle-orm';
+import {
+  and,
+  count,
+  desc,
+  eq,
+  gte,
+  isNotNull,
+  lt,
+  lte,
+  sql,
+  sum,
+} from 'drizzle-orm';
 import {
   type ApiDb,
   DRIZZLE_CLIENT,
@@ -10,6 +21,7 @@ import type {
   NewAssistantRun,
 } from '../../domain/AssistantRun';
 import { isHandoffReason } from '../../domain/handoff';
+import type { RunsTally } from '../../domain/weeklySummary';
 import { assistantRuns } from './assistant.schema';
 
 @Injectable()
@@ -81,6 +93,75 @@ export class DrizzleAssistantRunsRepository
       outcome: 'handoff',
       reason: isHandoffReason(row.reason) ? row.reason : 'error',
       toolCalls,
+    };
+  }
+
+  async tally({ from, to }: { from: Date; to: Date }): Promise<RunsTally> {
+    const inWindow = and(
+      gte(assistantRuns.createdAt, from),
+      lte(assistantRuns.createdAt, to)
+    );
+    // One row per chat the assistant spoke in (an answer or a handoff); an
+    // `error` run means a person took it while the model was answering.
+    const chats = this.db
+      .select({
+        needsPerson:
+          sql<boolean>`bool_or(${assistantRuns.outcome} <> 'answered')`.as(
+            'needs_person'
+          ),
+      })
+      .from(assistantRuns)
+      .where(inWindow)
+      .groupBy(assistantRuns.conversationId)
+      .having(sql`bool_or(${assistantRuns.outcome} <> 'error')`)
+      .as('chats');
+    const [[attended], handoffs, usage] = await Promise.all([
+      this.db
+        .select({
+          conversations: count(),
+          // Builder has no FILTER clause: a count over a condition needs `sql`.
+          resolvedWithoutPerson:
+            sql<number>`count(*) filter (where not ${chats.needsPerson})`.mapWith(
+              Number
+            ),
+        })
+        .from(chats),
+      this.db
+        .select({ reason: assistantRuns.reason, count: count() })
+        .from(assistantRuns)
+        .where(and(inWindow, eq(assistantRuns.outcome, 'handoff')))
+        .groupBy(assistantRuns.reason),
+      this.db
+        .select({
+          model: assistantRuns.model,
+          inputTokens: sum(assistantRuns.inputTokens).mapWith(Number),
+          outputTokens: sum(assistantRuns.outputTokens).mapWith(Number),
+          cacheReadTokens: sum(assistantRuns.cacheReadTokens).mapWith(Number),
+          cacheWriteTokens: sum(assistantRuns.cacheWriteTokens).mapWith(Number),
+        })
+        .from(assistantRuns)
+        .where(and(inWindow, isNotNull(assistantRuns.model)))
+        .groupBy(assistantRuns.model),
+    ]);
+    return {
+      conversations: attended?.conversations ?? 0,
+      resolvedWithoutPerson: attended?.resolvedWithoutPerson ?? 0,
+      handoffs,
+      usageByModel: usage.flatMap(({ model, ...tokens }) =>
+        model
+          ? [
+              {
+                model,
+                usage: {
+                  inputTokens: tokens.inputTokens ?? 0,
+                  outputTokens: tokens.outputTokens ?? 0,
+                  cacheReadTokens: tokens.cacheReadTokens ?? 0,
+                  cacheWriteTokens: tokens.cacheWriteTokens ?? 0,
+                },
+              },
+            ]
+          : []
+      ),
     };
   }
 

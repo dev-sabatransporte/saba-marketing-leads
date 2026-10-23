@@ -17,4 +17,5 @@ export const ASSISTANT_TOKENS = {
   GetDailyLimitStatus: Symbol('GetDailyLimitStatusPort'),
   GetMessageExplanation: Symbol('GetMessageExplanationPort'),
   PurgeOldRuns: Symbol('PurgeOldRunsPort'),
+  GetWeeklySummary: Symbol('GetWeeklySummaryPort'),
 } as const;

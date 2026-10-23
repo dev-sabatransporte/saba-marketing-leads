@@ -136,6 +136,9 @@ function setup({
       record,
       countReplies,
       explainSentMessage: async () => null,
+      tally: async () => {
+        throw new Error('a turn never tallies');
+      },
       deleteCreatedBefore: async () => 0,
     },
     { now: () => NOW }

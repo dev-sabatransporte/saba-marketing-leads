@@ -5,6 +5,7 @@ import { WHATSAPP_TOKENS } from '../whatsapp/tokens';
 import { GetAssistantSettingsUseCase } from './application/use-cases/GetAssistantSettingsUseCase';
 import { GetDailyLimitStatusUseCase } from './application/use-cases/GetDailyLimitStatusUseCase';
 import { GetMessageExplanationUseCase } from './application/use-cases/GetMessageExplanationUseCase';
+import { GetWeeklySummaryUseCase } from './application/use-cases/GetWeeklySummaryUseCase';
 import { PurgeOldRunsUseCase } from './application/use-cases/PurgeOldRunsUseCase';
 import { ReplyToDueChatsUseCase } from './application/use-cases/ReplyToDueChatsUseCase';
 import { RunAssistantTurnUseCase } from './application/use-cases/RunAssistantTurnUseCase';
@@ -24,6 +25,7 @@ import { DrizzlePendingRepliesRepository } from './infrastructure/persistence/Dr
 import { AssistantDailyLimitController } from './infrastructure/web/AssistantDailyLimitController';
 import { AssistantMessageExplanationController } from './infrastructure/web/AssistantMessageExplanationController';
 import { AssistantSettingsController } from './infrastructure/web/AssistantSettingsController';
+import { AssistantWeeklySummaryController } from './infrastructure/web/AssistantWeeklySummaryController';
 import { ASSISTANT_TOKENS } from './tokens';
 
 @Module({
@@ -32,6 +34,7 @@ import { ASSISTANT_TOKENS } from './tokens';
     AssistantSettingsController,
     AssistantDailyLimitController,
     AssistantMessageExplanationController,
+    AssistantWeeklySummaryController,
   ],
   providers: [
     {
@@ -102,6 +105,11 @@ import { ASSISTANT_TOKENS } from './tokens';
       useExisting: PurgeOldRunsUseCase,
     },
     AssistantRunsPurger,
+    GetWeeklySummaryUseCase,
+    {
+      provide: ASSISTANT_TOKENS.GetWeeklySummary,
+      useExisting: GetWeeklySummaryUseCase,
+    },
   ],
 })
 export class AssistantModule {}
