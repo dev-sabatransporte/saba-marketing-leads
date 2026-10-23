@@ -244,6 +244,174 @@ describe('ChatsPage', () => {
     ).toBeInTheDocument();
   });
 
+  describe('"¿por qué?" of an assistant message', () => {
+    function assistantMessages(): void {
+      server.use(
+        http.get(`${base}/:id/messages`, () =>
+          HttpResponse.json({
+            success: true,
+            data: [
+              {
+                id: 'a1',
+                direction: 'outbound',
+                source: 'assistant',
+                type: 'text',
+                body: 'Sí, tenemos la Moto Eléctrica',
+                status: 'delivered',
+                errorDetail: null,
+                hasMedia: false,
+                waTimestamp: '2026-10-07T15:00:00.000Z',
+              },
+              {
+                id: 'm9',
+                direction: 'outbound',
+                source: 'system',
+                type: 'text',
+                body: 'Hola, soy Ana',
+                status: 'delivered',
+                errorDetail: null,
+                hasMedia: false,
+                waTimestamp: '2026-10-07T15:01:00.000Z',
+              },
+            ],
+          })
+        )
+      );
+    }
+
+    async function openThread() {
+      const user = userEvent.setup();
+      render(<ChatsPage />);
+      await user.click(
+        await screen.findByRole('button', { name: /Ana Pérez/ })
+      );
+      const thread = await screen.findByRole('list', { name: 'Mensajes' });
+      return { user, thread };
+    }
+
+    it('shows what it searched and found, only on assistant messages', async () => {
+      assistantMessages();
+      let asked: string | undefined;
+      server.use(
+        http.get(
+          `${BACKEND_URL}/v1/assistant/messages/:id/explanation`,
+          ({ params }) => {
+            asked = String(params.id);
+            return HttpResponse.json({
+              success: true,
+              data: {
+                outcome: 'answered',
+                handoffReason: null,
+                toolCalls: [
+                  {
+                    tool: 'search_products',
+                    query: 'moto electrica',
+                    resultCount: 3,
+                  },
+                ],
+              },
+            });
+          }
+        )
+      );
+      const { user, thread } = await openThread();
+
+      expect(
+        within(thread).getAllByRole('button', { name: '¿Por qué?' })
+      ).toHaveLength(1);
+      await user.click(
+        within(thread).getByRole('button', { name: '¿Por qué?' })
+      );
+
+      expect(
+        await within(thread).findByText('Buscó productos: «moto electrica»')
+      ).toBeInTheDocument();
+      expect(within(thread).getByText('3 resultados')).toBeInTheDocument();
+      expect(
+        within(thread).getByText('Respondió al cliente')
+      ).toBeInTheDocument();
+      expect(asked).toBe('a1');
+    });
+
+    it('shows the handoff reason and a search Saba did not answer', async () => {
+      assistantMessages();
+      server.use(
+        http.get(`${BACKEND_URL}/v1/assistant/messages/:id/explanation`, () =>
+          HttpResponse.json({
+            success: true,
+            data: {
+              outcome: 'handoff',
+              handoffReason: 'limit_reached',
+              toolCalls: [
+                {
+                  tool: 'search_products',
+                  query: 'SBR 150',
+                  resultCount: null,
+                },
+              ],
+            },
+          })
+        )
+      );
+      const { user, thread } = await openThread();
+      await user.click(
+        within(thread).getByRole('button', { name: '¿Por qué?' })
+      );
+
+      expect(
+        await within(thread).findByText(
+          /Traspasó a un asesor: limite_alcanzado/
+        )
+      ).toBeInTheDocument();
+      expect(within(thread).getByText('Saba no respondió')).toBeInTheDocument();
+    });
+
+    it('says when it searched nothing', async () => {
+      assistantMessages();
+      server.use(
+        http.get(`${BACKEND_URL}/v1/assistant/messages/:id/explanation`, () =>
+          HttpResponse.json({
+            success: true,
+            data: { outcome: 'answered', handoffReason: null, toolCalls: [] },
+          })
+        )
+      );
+      const { user, thread } = await openThread();
+      await user.click(
+        within(thread).getByRole('button', { name: '¿Por qué?' })
+      );
+
+      expect(
+        await within(thread).findByText('No buscó productos.')
+      ).toBeInTheDocument();
+    });
+
+    it('shows the API error when there is no detail', async () => {
+      assistantMessages();
+      server.use(
+        http.get(`${BACKEND_URL}/v1/assistant/messages/:id/explanation`, () =>
+          HttpResponse.json(
+            {
+              success: false,
+              code: 'ASSISTANT_MESSAGE_EXPLANATION_NOT_FOUND',
+              error:
+                'No hay detalle de este mensaje: no lo envió el asistente o ya pasaron más de 90 días.',
+            },
+            { status: 404 }
+          )
+        )
+      );
+      const { user, thread } = await openThread();
+      await user.click(
+        within(thread).getByRole('button', { name: '¿Por qué?' })
+      );
+
+      expect(await within(thread).findByRole('alert')).toHaveTextContent(
+        'ya pasaron más de 90 días'
+      );
+    });
+  });
+
   it('turns the assistant off and on in the open chat', async () => {
     const sent: unknown[] = [];
     let enabled = true;

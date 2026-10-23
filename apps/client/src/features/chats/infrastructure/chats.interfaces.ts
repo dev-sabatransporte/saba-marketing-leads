@@ -1,5 +1,6 @@
 import type {
   TAssistantDailyLimit,
+  TAssistantMessageExplanation,
   TAssistantSwitch,
   TChatMessage,
   TChatSabaCustomers,
@@ -25,7 +26,10 @@ export interface ChatsApi {
   getSabaCustomer(conversationId: string): Promise<Safe<TChatSabaCustomers>>;
 }
 
-/** Port: what the chats need from the assistant, to warn the team. */
+/** Port: what the chats need from the assistant, to warn the team and explain its messages. */
 export interface AssistantStatusApi {
   getDailyLimit(): Promise<Safe<TAssistantDailyLimit>>;
+  getMessageExplanation(
+    messageId: string
+  ): Promise<Safe<TAssistantMessageExplanation>>;
 }

@@ -1,9 +1,11 @@
 import type {
+  TAssistantMessageExplanation,
   TChatMessage,
   TChatSabaCustomers,
   TConversationSummary,
 } from '@repo/schemas';
 import type { Conversation, Message } from '../domain/chat.model';
+import type { MessageExplanation } from '../domain/messageExplanation.model';
 import type { ChatSabaCustomers } from '../domain/sabaCustomer.model';
 
 /** The browser requests it from the BFF, which adds the session; never from Meta directly. */
@@ -55,6 +57,18 @@ export function toSabaCustomerDomain(
         ...s,
         createdAt: new Date(s.createdAt),
       })),
+    })),
+  };
+}
+
+export function toMessageExplanationDomain(
+  dto: TAssistantMessageExplanation
+): MessageExplanation {
+  return {
+    handoffReason: dto.outcome === 'handoff' ? dto.handoffReason : null,
+    searches: dto.toolCalls.map(({ query, resultCount }) => ({
+      query,
+      resultCount,
     })),
   };
 }

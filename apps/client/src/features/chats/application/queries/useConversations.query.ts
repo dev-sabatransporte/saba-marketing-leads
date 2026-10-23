@@ -10,6 +10,8 @@ export const chatsQueryKeys = {
   dailyLimit: () => [...chatsQueryKeys.all(), 'dailyLimit'] as const,
   messages: (conversationId: string) =>
     [...chatsQueryKeys.all(), 'messages', conversationId] as const,
+  messageExplanation: (messageId: string) =>
+    [...chatsQueryKeys.all(), 'messageExplanation', messageId] as const,
 };
 
 export function conversationsQueryOptions() {

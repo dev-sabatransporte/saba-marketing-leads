@@ -1,11 +1,13 @@
 import type { TSendMessage } from '@repo/schemas';
 import type { Safe } from '@repo/utils';
 import type { Conversation, Message } from '../domain/chat.model';
+import type { MessageExplanation } from '../domain/messageExplanation.model';
 import type { ChatSabaCustomers } from '../domain/sabaCustomer.model';
 import type { AssistantStatusApi, ChatsApi } from './chats.interfaces';
 import {
   toConversationDomain,
   toMessageDomain,
+  toMessageExplanationDomain,
   toSabaCustomerDomain,
 } from './chats.transform';
 
@@ -62,5 +64,11 @@ export class ChatsServiceClass {
   /** Whether the assistant stopped answering for today. */
   async isDailyLimitReached(): Promise<boolean> {
     return data(await this.assistantApi.getDailyLimit()).reached;
+  }
+
+  async explainMessage(messageId: string): Promise<MessageExplanation> {
+    return toMessageExplanationDomain(
+      data(await this.assistantApi.getMessageExplanation(messageId))
+    );
   }
 }
