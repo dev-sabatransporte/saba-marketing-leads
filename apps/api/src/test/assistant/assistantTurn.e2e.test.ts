@@ -73,10 +73,14 @@ const CATIA: Store = {
   publicHours: 'Lunes a viernes 8:00 a. m. a 5:00 p. m.',
 };
 
-const ANSWER_TEXT =
-  'Hola, soy el asistente virtual de Saba. Catia queda en la Av. Sucre.';
+const ANSWER_TEXT = 'Catia queda en la Av. Sucre.';
 // Catia is named, so code appends its map link: the model never writes it.
 const SENT_TEXT = `${ANSWER_TEXT}\n\n📍 Catia: https://maps.app.goo.gl/x`;
+// The test clock starts at 16:01 in Venezuela.
+const INTRO =
+  'Buenas tardes, te responde el asistente virtual de Saba Transporte 🤖.';
+/** The first reply since the chat (re)opened carries the introduction. */
+const first = (text: string): string => `${INTRO} ${text}`;
 const REPLY: ModelReply = {
   kind: 'answer',
   text: ANSWER_TEXT,
@@ -276,14 +280,14 @@ describe('assistant turn (webhook → wait → model → WhatsApp)', () => {
     ]);
 
     expect(sendText).toHaveBeenCalledTimes(1);
-    expect(sendText).toHaveBeenCalledWith('584140000001', SENT_TEXT);
+    expect(sendText).toHaveBeenCalledWith('584140000001', first(SENT_TEXT));
 
     const sent = await getTestDb()
       .select()
       .from(whatsappMessages)
       .where(eq(whatsappMessages.source, 'assistant'));
     expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({ body: SENT_TEXT, sentBy: null });
+    expect(sent[0]).toMatchObject({ body: first(SENT_TEXT), sentBy: null });
 
     const [inbound] = await getTestDb()
       .select()
@@ -374,7 +378,7 @@ describe('assistant turn (webhook → wait → model → WhatsApp)', () => {
       expect(input?.instructions.includes('en 1 o 2 frases')).toBe(
         simpleReplies
       );
-      expect(sendText).toHaveBeenCalledWith('584140000001', SENT_TEXT);
+      expect(sendText).toHaveBeenCalledWith('584140000001', first(SENT_TEXT));
       expect(run).toMatchObject({ outcome: 'answered' });
     }
   );
@@ -410,7 +414,7 @@ describe('assistant turn (webhook → wait → model → WhatsApp)', () => {
     const run = await waitForRun();
     expect(sendText).toHaveBeenCalledWith(
       '584140000001',
-      handoffNotice(reason)
+      first(handoffNotice(reason))
     );
     expect(await conversation()).toMatchObject({
       handoffReason: reason,
@@ -433,6 +437,58 @@ describe('assistant turn (webhook → wait → model → WhatsApp)', () => {
     await receive(textMessage('¿cuánto cuesta la moto?'));
 
     await expectHandoff(reason);
+  });
+
+  describe('the introduction', () => {
+    it('answers a first message that is only a greeting with the introduction and the offer', async () => {
+      await turnOn();
+      reply.mockResolvedValueOnce({
+        ...REPLY,
+        kind: 'fixed',
+        reply: 'greeting',
+      });
+
+      await receive(textMessage('buenas tardes'));
+      const run = await waitForRun();
+
+      expect(sendText).toHaveBeenCalledTimes(1);
+      expect(sendText).toHaveBeenCalledWith(
+        '584140000001',
+        `${INTRO} ${GREETING_REPLY}`
+      );
+      expect(run).toMatchObject({ outcome: 'answered', reason: 'greeting' });
+    });
+
+    it('goes only on the first reply since the chat opened', async () => {
+      await turnOn();
+      await receive(textMessage('¿dónde queda Catia?', 'wamid.A'));
+      await waitForRun();
+
+      await receive(textMessage('¿y Catia?', 'wamid.B', 100));
+
+      await vi.waitFor(() => expect(sendText).toHaveBeenCalledTimes(2));
+      expect(sendText.mock.calls.map(([, body]) => body)).toEqual([
+        first(SENT_TEXT),
+        SENT_TEXT,
+      ]);
+    });
+
+    it('comes back once the customer writes in a resolved chat', async () => {
+      await turnOn();
+      await receive(textMessage('¿dónde queda Catia?', 'wamid.A'));
+      await waitForRun();
+      await getTestDb()
+        .update(whatsappConversations)
+        .set({ status: 'resolved' });
+
+      await receive(textMessage('¿y Catia?', 'wamid.B', 600));
+
+      await vi.waitFor(() => expect(sendText).toHaveBeenCalledTimes(2));
+      expect(sendText).toHaveBeenLastCalledWith(
+        '584140000001',
+        first(SENT_TEXT)
+      );
+    });
   });
 
   it.each([
@@ -635,7 +691,7 @@ describe('assistant turn (webhook → wait → model → WhatsApp)', () => {
 
     await vi.waitFor(() => expect(reply).toHaveBeenCalledTimes(1));
     await vi.waitFor(() =>
-      expect(sendText).toHaveBeenCalledWith('584140000001', SENT_TEXT)
+      expect(sendText).toHaveBeenCalledWith('584140000001', first(SENT_TEXT))
     );
   });
 
@@ -688,7 +744,7 @@ describe('assistant turn (webhook → wait → model → WhatsApp)', () => {
       expect(reply.mock.calls[1]?.[0].searches).toEqual([
         { callId: 'toolu_1', query: 'bera sbr', products: [BERA] },
       ]);
-      expect(sendText).toHaveBeenCalledWith('584140000001', text);
+      expect(sendText).toHaveBeenCalledWith('584140000001', first(text));
       expect(run).toMatchObject({
         outcome: 'answered',
         toolCalls: [
@@ -742,7 +798,7 @@ describe('assistant turn (webhook → wait → model → WhatsApp)', () => {
       expect(sendText).toHaveBeenCalledTimes(1);
       expect(sendText).toHaveBeenCalledWith(
         '584140000001',
-        expect.stringContaining(PRICING_REPLY)
+        first(PRICING_REPLY)
       );
       expect(await conversation()).toMatchObject({
         handoffRequestedAt: null,
@@ -820,7 +876,10 @@ describe('assistant turn (webhook → wait → model → WhatsApp)', () => {
       const run = await expectHandoff('error');
 
       expect(reply).toHaveBeenCalledTimes(1);
-      expect(sendText).toHaveBeenCalledWith('584140000001', HANDOFF_NOTICE);
+      expect(sendText).toHaveBeenCalledWith(
+        '584140000001',
+        first(HANDOFF_NOTICE)
+      );
       expect(run).toMatchObject({
         errorDetail: expect.stringContaining('429'),
         toolCalls: [
@@ -1005,7 +1064,10 @@ describe('assistant turn (webhook → wait → model → WhatsApp)', () => {
       await receiveAndWait(
         textMessage('¿siguen ahí?', 'wamid.B', sentAt(midnight + 20))
       );
-      expect(sendText).toHaveBeenCalledWith('584140000001', SENT_TEXT);
+      expect(sendText).toHaveBeenCalledWith(
+        '584140000001',
+        `Buenas noches, te responde el asistente virtual de Saba Transporte 🤖. ${SENT_TEXT}`
+      );
       expect((await runs()).at(-1)).toMatchObject({ outcome: 'answered' });
     });
   });
@@ -1069,7 +1131,7 @@ describe('assistant turn (webhook → wait → model → WhatsApp)', () => {
       await startApp();
 
       expect(await sweepAfter(8)).toBe(1);
-      expect(sendText).toHaveBeenCalledWith('584140000001', SENT_TEXT);
+      expect(sendText).toHaveBeenCalledWith('584140000001', first(SENT_TEXT));
     });
 
     it('a message that arrives after the reply starts a new wait', async () => {
@@ -1176,7 +1238,10 @@ describe('assistant turn (webhook → wait → model → WhatsApp)', () => {
 
       expect(reply).not.toHaveBeenCalled();
       expect(sendText).toHaveBeenCalledTimes(1);
-      expect(sendText).toHaveBeenCalledWith('584140000001', HANDOFF_NOTICE);
+      expect(sendText).toHaveBeenCalledWith(
+        '584140000001',
+        first(HANDOFF_NOTICE)
+      );
       const [run] = await getTestDb().select().from(assistantRuns);
       expect(run).toMatchObject({ outcome: 'handoff', reason: 'non_text' });
       expect(run?.inboundMessageIds).toHaveLength(2);

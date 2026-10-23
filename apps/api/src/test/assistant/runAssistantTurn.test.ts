@@ -17,6 +17,7 @@ import {
 } from '../../modules/assistant/domain/AssistantSettings';
 import {
   CLOSING_REPLY,
+  type FixedReply,
   GREETING_REPLY,
   PRICING_REPLY,
 } from '../../modules/assistant/domain/fixedReplies';
@@ -469,6 +470,102 @@ describe('RunAssistantTurnUseCase', () => {
         errorDetail: expect.stringContaining('Meta 500'),
       })
     );
+  });
+
+  describe('the first reply since the chat (re)opened', () => {
+    const FIRST = { ...CHAT, assistantRepliedSinceOpened: false };
+    // NOW is 11:00 in Venezuela.
+    const INTRO =
+      'Buenos días, te responde el asistente virtual de Saba Transporte 🤖.';
+    const fixedReply = (fixed: FixedReply) =>
+      vi.fn(
+        async (): Promise<ModelReply> => ({
+          kind: 'fixed',
+          reply: fixed,
+          model: 'claude-sonnet-5-5',
+          usage: USAGE,
+        })
+      );
+
+    it('puts the introduction before the answer, in the same paragraph', async () => {
+      const { turn, send } = setup({ chat: FIRST });
+
+      expect(await turn()).toBe('answered');
+      expect(send).toHaveBeenCalledWith('c-1', `${INTRO} ${ANSWER_TEXT}`);
+    });
+
+    it.each([
+      ['greeting', GREETING_REPLY],
+      ['closing', CLOSING_REPLY],
+      ['pricing', PRICING_REPLY],
+    ] as const)('puts it before the fixed %s text', async (fixed, text) => {
+      const { turn, send } = setup({ chat: FIRST, reply: fixedReply(fixed) });
+
+      await turn();
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledWith('c-1', `${INTRO} ${text}`);
+    });
+
+    it('puts it before the prices text that replaces an answer with an amount', async () => {
+      const { turn, send } = setup({
+        chat: FIRST,
+        reply: vi.fn(
+          async (): Promise<ModelReply> => ({
+            ...ANSWER,
+            text: 'Cuesta $1.200.',
+          })
+        ),
+      });
+
+      await turn();
+      expect(send).toHaveBeenCalledWith('c-1', `${INTRO} ${PRICING_REPLY}`);
+    });
+
+    it("puts it before a handoff notice, the model's or the code's", async () => {
+      const chosen = setup({
+        chat: FIRST,
+        reply: vi.fn(
+          async (): Promise<ModelReply> => ({
+            kind: 'handoff',
+            reason: 'customer_requested',
+            model: 'claude-sonnet-5-5',
+            usage: USAGE,
+          })
+        ),
+      });
+      await chosen.turn();
+      expect(chosen.send).toHaveBeenCalledWith(
+        'c-1',
+        `${INTRO} ${HANDOFF_NOTICE}`
+      );
+
+      const image = setup({ chat: { ...FIRST, messages: [IMAGE] } });
+      await image.turn(['img-1']);
+      expect(image.send).toHaveBeenCalledWith(
+        'c-1',
+        `${INTRO} ${HANDOFF_NOTICE}`
+      );
+    });
+
+    it('keeps it on the notice when the reply with it could not be sent', async () => {
+      const send = vi
+        .fn(async (_id: string, _body: string) => ({ id: 'out-2' }))
+        .mockRejectedValueOnce(new Error('Meta 500'));
+      const { turn } = setup({ chat: FIRST, send });
+
+      expect(await turn()).toBe('handoff');
+      expect(send).toHaveBeenLastCalledWith(
+        'c-1',
+        `${INTRO} ${HANDOFF_NOTICE}`
+      );
+    });
+
+    it('later replies go without it', async () => {
+      const { turn, send } = setup({ reply: fixedReply('greeting') });
+
+      await turn();
+      expect(send).toHaveBeenCalledWith('c-1', GREETING_REPLY);
+    });
   });
 
   it('hands over a message that is not text without asking the model', async () => {

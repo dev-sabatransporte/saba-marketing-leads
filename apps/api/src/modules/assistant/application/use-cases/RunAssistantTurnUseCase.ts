@@ -12,7 +12,11 @@ import {
   toModelTurns,
   withinReplyWindow,
 } from '../../domain/conversation';
-import { fixedReplyText, PRICING_REPLY } from '../../domain/fixedReplies';
+import {
+  fixedReplyText,
+  PRICING_REPLY,
+  withIntroduction,
+} from '../../domain/fixedReplies';
 import {
   type HandoffReason,
   handoffNotice,
@@ -60,9 +64,17 @@ interface Billed {
   usage: TokenUsage | null;
 }
 
+/** Where a turn's message goes, how it is recorded and how it is worded. */
+interface Outbox {
+  conversationId: string;
+  run: (fields: RunFields) => Promise<void>;
+  /** Puts the introduction in front on the first reply since the chat opened. */
+  say: (text: string) => string;
+}
+
 type Decision =
   | {
-      kind: 'decided';
+      kind: 'reply';
       reply: Exclude<ModelReply, { kind: 'search_products' }>;
       billed: Billed;
     }
@@ -135,11 +147,14 @@ export class RunAssistantTurnUseCase implements RunAssistantTurnPort {
         ...fields,
       });
     };
+    // The first reply since the chat (re)opened says a bot is answering.
+    const say = (text: string): string =>
+      chat.assistantRepliedSinceOpened ? text : withIntroduction(text, now);
+    const outbox: Outbox = { conversationId, run, say };
     const handOver = (
       reason: HandoffReason,
       details: Pick<RunFields, 'errorDetail' | 'model' | 'usage'>
-    ): Promise<TurnResult> =>
-      this.handOver(conversationId, reason, details, run);
+    ): Promise<TurnResult> => this.handOver(outbox, reason, details);
 
     // The handoff mark keeps it to a single one: the chat stays silent until resolved.
     if (
@@ -189,7 +204,7 @@ export class RunAssistantTurnUseCase implements RunAssistantTurnPort {
         ...decision.billed,
       });
     }
-    const { reply, billed } = decision;
+    const { reply: reply, billed } = decision;
     // The model takes seconds: a person may have taken the chat meanwhile.
     const latest = await this.channel.read(conversationId, HISTORY_LIMIT);
     if (!latest || aPersonHasTheChat(latest)) {
@@ -206,20 +221,20 @@ export class RunAssistantTurnUseCase implements RunAssistantTurnPort {
       return handOver(reply.reason, { errorDetail: null, ...billed });
     }
     if (reply.kind === 'fixed') {
-      return this.answer(conversationId, fixedReplyText(reply.reply), run, {
+      return this.answer(outbox, fixedReplyText(reply.reply), {
         reason: reply.reply,
         errorDetail: null,
         ...billed,
       });
     }
     if (mentionsAnAmount(reply.text)) {
-      return this.answer(conversationId, PRICING_REPLY, run, {
+      return this.answer(outbox, PRICING_REPLY, {
         reason: 'pricing',
         errorDetail: 'la respuesta mencionaba un monto; no se envió',
         ...billed,
       });
     }
-    return this.answer(conversationId, withMapLinks(reply.text, stores), run, {
+    return this.answer(outbox, withMapLinks(reply.text, stores), {
       reason: null,
       errorDetail: null,
       ...billed,
@@ -228,26 +243,22 @@ export class RunAssistantTurnUseCase implements RunAssistantTurnPort {
 
   /** Sends the reply; if WhatsApp rejects it, someone has to pick the chat up. */
   private async answer(
-    conversationId: string,
+    outbox: Outbox,
     text: string,
-    run: (fields: RunFields) => Promise<void>,
     details: Pick<RunFields, 'reason' | 'errorDetail' | 'model' | 'usage'>
   ): Promise<TurnResult> {
+    const { conversationId, run, say } = outbox;
     let sentMessageId: string;
     try {
-      sentMessageId = (await this.channel.sendAsAssistant(conversationId, text))
-        .id;
+      sentMessageId = (
+        await this.channel.sendAsAssistant(conversationId, say(text))
+      ).id;
     } catch (error: unknown) {
-      return this.handOver(
-        conversationId,
-        'error',
-        {
-          errorDetail: `send_failed: ${describe(error)}`,
-          model: details.model,
-          usage: details.usage,
-        },
-        run
-      );
+      return this.handOver(outbox, 'error', {
+        errorDetail: `send_failed: ${describe(error)}`,
+        model: details.model,
+        usage: details.usage,
+      });
     }
 
     // Outside the try: a failure here must not log a reply that did go out as failed.
@@ -299,7 +310,7 @@ export class RunAssistantTurnUseCase implements RunAssistantTurnPort {
         usage: addUsage(billed.usage, reply.usage),
       };
       if (reply.kind !== 'search_products') {
-        return { kind: 'decided', reply, billed };
+        return { kind: 'reply', reply, billed };
       }
       if (searches.length === MAX_SEARCHES) {
         return {
@@ -337,10 +348,9 @@ export class RunAssistantTurnUseCase implements RunAssistantTurnPort {
    * the notice fails, someone still picks the chat up.
    */
   private async handOver(
-    conversationId: string,
+    { conversationId, run, say }: Outbox,
     reason: HandoffReason,
-    details: Pick<RunFields, 'errorDetail' | 'model' | 'usage'>,
-    run: (fields: RunFields) => Promise<void>
+    details: Pick<RunFields, 'errorDetail' | 'model' | 'usage'>
   ): Promise<TurnResult> {
     await this.channel.requestHandoff(conversationId, reason);
     let sentMessageId: string | null = null;
@@ -349,7 +359,7 @@ export class RunAssistantTurnUseCase implements RunAssistantTurnPort {
       sentMessageId = (
         await this.channel.sendAsAssistant(
           conversationId,
-          handoffNotice(reason)
+          say(handoffNotice(reason))
         )
       ).id;
     } catch (error: unknown) {
