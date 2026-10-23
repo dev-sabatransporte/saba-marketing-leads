@@ -13,3 +13,8 @@ export function startOfVenezuelanDay(now: Date): Date {
 export function contactWindowStart(now: Date): Date {
   return new Date(now.getTime() - DAY_MS);
 }
+
+/** The hour of the day (0–23) in Caracas. */
+export function venezuelanHour(now: Date): number {
+  return new Date(now.getTime() + VENEZUELA_OFFSET_MS).getUTCHours();
+}

@@ -30,8 +30,12 @@ export function handoffNotice(reason: HandoffReason): string {
   return reason === 'out_of_stock' ? OUT_OF_STOCK_NOTICE : HANDOFF_NOTICE;
 }
 
+/** Also with the introduction in front, as the first reply of a chat. */
 export function isHandoffNotice(body: string | null): boolean {
-  return body === HANDOFF_NOTICE || body === OUT_OF_STOCK_NOTICE;
+  return (
+    !!body &&
+    (body.endsWith(HANDOFF_NOTICE) || body.endsWith(OUT_OF_STOCK_NOTICE))
+  );
 }
 
 // A currency sign or name, or a number next to a payment word. Plain numbers

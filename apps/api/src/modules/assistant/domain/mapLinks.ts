@@ -1,8 +1,5 @@
 import type { Store } from './instructions';
 
-// Past this the reply is a list of stores, and a wall of links helps nobody.
-const MAX_LINKED_STORES = 3;
-
 function fold(text: string): string {
   return text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 }
@@ -38,14 +35,13 @@ function namedStores(text: string, stores: Store[]): Store[] {
 }
 
 /**
- * Appends the map link of each store the reply names. The model never sees
+ * Appends the map link of the store the reply is about. The model never sees
  * or writes the URLs: copied by hand they cost output and come out altered.
+ * Naming several means the customer has not picked one yet, so no links.
  */
 export function withMapLinks(text: string, stores: Store[] | null): string {
   const named = namedStores(text, stores ?? []);
-  if (named.length > MAX_LINKED_STORES) return text;
-  const lines = named.flatMap((store) =>
-    store.mapUrl ? [`📍 ${store.name}: ${store.mapUrl}`] : []
-  );
-  return lines.length ? `${text}\n\n${lines.join('\n')}` : text;
+  const [store] = named;
+  if (named.length !== 1 || !store?.mapUrl) return text;
+  return `${text}\n\n📍 ${store.name}: ${store.mapUrl}`;
 }

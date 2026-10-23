@@ -5,6 +5,15 @@ import {
   withinReplyWindow,
 } from '../../modules/assistant/domain/conversation';
 import {
+  CLOSING_REPLY,
+  fixedReplyText,
+  GREETING_REPLY,
+  greetingFor,
+  introduction,
+  PRICING_REPLY,
+  withIntroduction,
+} from '../../modules/assistant/domain/fixedReplies';
+import {
   HANDOFF_NOTICE,
   handoffNotice,
   mentionsAnAmount,
@@ -227,6 +236,16 @@ describe('toModelTurns after a handoff', () => {
     ).toEqual([{ role: 'user', content: 'Hola' }]);
   });
 
+  it('also starts fresh after a notice that went out with the introduction', () => {
+    expect(
+      toModelTurns([
+        line('customer', 'asesor'),
+        line('assistant', withIntroduction(HANDOFF_NOTICE, new Date())),
+        line('customer', 'hola'),
+      ])
+    ).toEqual([{ role: 'user', content: 'hola' }]);
+  });
+
   it('also starts fresh after an out-of-stock notice', () => {
     expect(
       toModelTurns([
@@ -339,7 +358,7 @@ describe('withMapLinks', () => {
     );
     expect(
       withMapLinks('Catia y Catia La Mar abren a las 8.', [CATIA, catiaLaMar])
-    ).toContain('📍 Catia: https://maps.app.goo.gl/catia\n📍 Catia La Mar');
+    ).toBe('Catia y Catia La Mar abren a las 8.');
   });
 
   it('leaves the reply alone when it names no store', () => {
@@ -351,31 +370,81 @@ describe('withMapLinks', () => {
     );
   });
 
-  it('adds one line per store named, once each', () => {
+  it('adds the line once even when the reply names the store twice', () => {
     expect(
-      withMapLinks('Catia y Los Teques abren a las 8; Catia cierra a las 5.', [
+      withMapLinks('Catia abre a las 8 y Catia cierra a las 5.', [
         CATIA,
         PETARE,
-        LOS_TEQUES,
       ])
     ).toBe(
-      'Catia y Los Teques abren a las 8; Catia cierra a las 5.\n\n' +
-        '📍 Catia: https://maps.app.goo.gl/catia\n' +
-        '📍 Los Teques: https://maps.app.goo.gl/teques'
+      'Catia abre a las 8 y Catia cierra a las 5.\n\n📍 Catia: https://maps.app.goo.gl/catia'
     );
   });
 
-  it('adds none when the reply names more than 3 stores', () => {
-    const text = 'Tenemos sedes en Catia, Petare, Los Teques y Maracay.';
-    expect(withMapLinks(text, [CATIA, PETARE, LOS_TEQUES, MARACAY])).toBe(text);
+  it.each([
+    'Tenemos Catia y Petare, ¿cuál te interesa?',
+    'Tenemos sedes en Catia, Petare, Los Teques y Maracay.',
+    'Iglesia y Catia abren a las 8.',
+  ])('adds none when the reply names more than one store: "%s"', (text) => {
+    expect(
+      withMapLinks(text, [CATIA, PETARE, LOS_TEQUES, MARACAY, IGLESIA])
+    ).toBe(text);
   });
 
   it('adds no line for a store without a map', () => {
-    expect(
-      withMapLinks('Iglesia y Catia abren a las 8.', [IGLESIA, CATIA])
-    ).toBe(
-      'Iglesia y Catia abren a las 8.\n\n📍 Catia: https://maps.app.goo.gl/catia'
+    expect(withMapLinks('Iglesia abre a las 8.', [IGLESIA, CATIA])).toBe(
+      'Iglesia abre a las 8.'
     );
+  });
+});
+
+describe('greetingFor', () => {
+  // Venezuela is UTC-4 all year: 05:00 there is 09:00 UTC.
+  it.each([
+    ['2026-10-22T08:59:00Z', 'Buenas noches'],
+    ['2026-10-22T09:00:00Z', 'Buenos días'],
+    ['2026-10-22T15:59:00Z', 'Buenos días'],
+    ['2026-10-22T16:00:00Z', 'Buenas tardes'],
+    ['2026-10-22T22:59:00Z', 'Buenas tardes'],
+    ['2026-10-22T23:00:00Z', 'Buenas noches'],
+    ['2026-10-23T03:30:00Z', 'Buenas noches'],
+  ])('at %s says "%s"', (at, greeting) => {
+    expect(greetingFor(new Date(at))).toBe(greeting);
+  });
+});
+
+describe('fixed replies', () => {
+  const MORNING = new Date('2026-10-22T13:00:00Z');
+
+  it('introduces the assistant as virtual, with the greeting of the hour', () => {
+    expect(introduction(MORNING)).toBe(
+      'Buenos días, te responde el asistente virtual de Saba Transporte 🤖.'
+    );
+  });
+
+  it('puts the introduction before a reply, in the same paragraph', () => {
+    expect(withIntroduction('Catia queda en la Av. Sucre.', MORNING)).toBe(
+      'Buenos días, te responde el asistente virtual de Saba Transporte 🤖. Catia queda en la Av. Sucre.'
+    );
+  });
+
+  it('has a fixed text for greetings, closings and prices', () => {
+    expect(fixedReplyText('greeting')).toBe(GREETING_REPLY);
+    expect(GREETING_REPLY).toBe(
+      'Puedo ayudarte con nuestros productos, nuestras sedes y sus horarios de atención. ¿Qué necesitas?'
+    );
+    expect(fixedReplyText('closing')).toBe(CLOSING_REPLY);
+    expect(CLOSING_REPLY).toBe(
+      '¡Con gusto! Si necesitas algo más, escríbeme por aquí.'
+    );
+    expect(fixedReplyText('pricing')).toBe(PRICING_REPLY);
+    expect(PRICING_REPLY).toBe(
+      'Los precios y las opciones de financiamiento los puedes ver en nuestra página web: www.sabatransporte.com'
+    );
+  });
+
+  it('the prices text never trips the amount check', () => {
+    expect(mentionsAnAmount(PRICING_REPLY)).toBe(false);
   });
 });
 
