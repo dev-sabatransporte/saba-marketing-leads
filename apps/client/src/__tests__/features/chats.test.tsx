@@ -366,13 +366,39 @@ describe('ChatsPage', () => {
       expect(within(thread).getByText('Saba no respondió')).toBeInTheDocument();
     });
 
-    it('says when it searched nothing', async () => {
+    it('says an answer without searches came from the stores and hours it has loaded', async () => {
       assistantMessages();
       server.use(
         http.get(`${BACKEND_URL}/v1/assistant/messages/:id/explanation`, () =>
           HttpResponse.json({
             success: true,
             data: { outcome: 'answered', handoffReason: null, toolCalls: [] },
+          })
+        )
+      );
+      const { user, thread } = await openThread();
+      await user.click(
+        within(thread).getByRole('button', { name: '¿Por qué?' })
+      );
+
+      expect(
+        await within(thread).findByText(
+          'No buscó productos: respondió solo con las sedes y horarios que tiene cargados.'
+        )
+      ).toBeInTheDocument();
+    });
+
+    it('says a handoff without searches searched nothing', async () => {
+      assistantMessages();
+      server.use(
+        http.get(`${BACKEND_URL}/v1/assistant/messages/:id/explanation`, () =>
+          HttpResponse.json({
+            success: true,
+            data: {
+              outcome: 'handoff',
+              handoffReason: 'pricing',
+              toolCalls: [],
+            },
           })
         )
       );

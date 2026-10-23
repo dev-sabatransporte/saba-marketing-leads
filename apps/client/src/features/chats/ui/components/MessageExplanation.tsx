@@ -4,6 +4,7 @@ import { Skeleton } from '@repo/ui/components/skeleton';
 import React from 'react';
 import { useMessageExplanation } from '../../application/queries/useMessageExplanation.query';
 import {
+  noSearchesLabel,
   outcomeLabel,
   resultsLabel,
 } from '../../domain/messageExplanation.model';
@@ -35,7 +36,7 @@ export function MessageExplanation({
               ))}
             </ul>
           ) : (
-            <p>No buscó productos.</p>
+            <p>{noSearchesLabel(data)}</p>
           )}
           <p className="font-medium">{outcomeLabel(data)}</p>
         </div>

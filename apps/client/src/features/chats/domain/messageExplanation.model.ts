@@ -33,6 +33,16 @@ export function outcomeLabel(explanation: MessageExplanation): string {
     : 'Respondió al cliente';
 }
 
+/**
+ * Stores and hours travel in the assistant's instructions, not as a search:
+ * an answer without searches could only use them.
+ */
+export function noSearchesLabel(explanation: MessageExplanation): string {
+  return explanation.handoffReason
+    ? 'No buscó productos.'
+    : 'No buscó productos: respondió solo con las sedes y horarios que tiene cargados.';
+}
+
 export function resultsLabel(resultCount: number | null): string {
   if (resultCount === null) return 'Saba no respondió';
   return resultCount === 1 ? '1 resultado' : `${resultCount} resultados`;
