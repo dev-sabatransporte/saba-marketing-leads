@@ -5,6 +5,7 @@ import { AssistantSettingsService } from '../../infrastructure';
 
 export const settingsQueryKeys = {
   assistant: () => ['settings', 'assistant'] as const,
+  weeklySummary: () => ['settings', 'weekly-summary'] as const,
 };
 
 export function useAssistantSettings() {

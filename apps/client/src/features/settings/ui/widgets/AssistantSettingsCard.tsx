@@ -16,6 +16,7 @@ import type {
   AssistantSettings,
 } from '../../domain/assistantSettings.model';
 import { AssistantLimitsForm } from '../components/AssistantLimitsForm';
+import { AssistantWeeklySummary } from '../components/AssistantWeeklySummary';
 import { SettingSwitch } from '../components/SettingSwitch';
 
 function limitsOf(settings: AssistantSettings): AssistantLimits {
@@ -27,7 +28,7 @@ function limitsOf(settings: AssistantSettings): AssistantLimits {
   };
 }
 
-/** The "Asistente" section: its switch and limits, applied from the next turn. */
+/** The "Asistente" section: its switch and limits, applied from the next turn, and how its week went. */
 export function AssistantSettingsCard(): React.JSX.Element {
   const { data: settings, isPending, error } = useAssistantSettings();
   const limits = useUpdateAssistantSettings();
@@ -92,6 +93,8 @@ export function AssistantSettingsCard(): React.JSX.Element {
             )}
           </>
         )}
+        <Separator />
+        <AssistantWeeklySummary />
       </CardContent>
     </Card>
   );

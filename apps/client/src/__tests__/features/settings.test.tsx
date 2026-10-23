@@ -2,7 +2,10 @@ import type { TAssistantSettings } from '@repo/schemas';
 import { HttpResponse, http } from 'msw';
 import React from 'react';
 import { BACKEND_URL } from '@/__tests__/mocks/backendUrl';
-import { assistantSettingsFixture } from '@/__tests__/mocks/handlers/assistantSettings.mock';
+import {
+  assistantSettingsFixture,
+  weeklySummaryFixture,
+} from '@/__tests__/mocks/handlers/assistantSettings.mock';
 import { sessionUserFixture } from '@/__tests__/mocks/handlers/session.mock';
 import SettingsRoute from '@/app/(app)/settings/page';
 import { server } from '../mocks/server';
@@ -15,6 +18,7 @@ import {
 } from '../test-utils/test-utils';
 
 const settingsUrl = `${BACKEND_URL}/v1/assistant/settings`;
+const summaryUrl = `${BACKEND_URL}/v1/assistant/weekly-summary`;
 
 function asManager(): void {
   server.use(
@@ -188,5 +192,112 @@ describe('Settings page', () => {
     expect(
       await screen.findByText('No tienes permiso para esta acción.')
     ).toBeInTheDocument();
+  });
+
+  describe('weekly summary', () => {
+    it('shows how the assistant did over the last 7 days in its section', async () => {
+      asManager();
+      render(<SettingsRoute />);
+
+      const section = await screen.findByRole('region', { name: 'Asistente' });
+      const summary = await within(section).findByRole('region', {
+        name: 'Últimos 7 días',
+      });
+      expect(
+        within(summary).getByText('Conversaciones atendidas').nextSibling
+      ).toHaveTextContent('40');
+      // 26 of 40.
+      expect(
+        within(summary).getByText('Resueltas sin persona').nextSibling
+      ).toHaveTextContent(/^65\s?%$/);
+      expect(
+        within(summary).getByText('Costo estimado').nextSibling
+      ).toHaveTextContent('US$ 1,23');
+
+      // Most frequent first; the reasons that did not happen are left out.
+      const reasons = within(
+        within(summary).getByRole('list', { name: 'Traspasos por motivo' })
+      ).getAllByRole('listitem');
+      expect(reasons.map((item) => item.textContent)).toEqual([
+        'Precio o financiamiento7',
+        'Fuera de alcance3',
+        'Mensaje que no es texto2',
+        'Pidió una persona1',
+        'limite_alcanzado1',
+      ]);
+    });
+
+    it('says when the week had no chats nor handoffs', async () => {
+      asManager();
+      server.use(
+        http.get(summaryUrl, () =>
+          HttpResponse.json({
+            success: true,
+            data: {
+              ...weeklySummaryFixture(),
+              conversations: 0,
+              resolvedWithoutPerson: 0,
+              handoffsByReason: Object.fromEntries(
+                Object.keys(weeklySummaryFixture().handoffsByReason).map(
+                  (reason) => [reason, 0]
+                )
+              ),
+              estimatedCostUsd: 0,
+            },
+          })
+        )
+      );
+      render(<SettingsRoute />);
+
+      const summary = await screen.findByRole('region', {
+        name: 'Últimos 7 días',
+      });
+      expect(
+        await within(summary).findByText('Resueltas sin persona')
+      ).toBeInTheDocument();
+      expect(
+        within(summary).getByText('Resueltas sin persona').nextSibling
+      ).toHaveTextContent('—');
+      expect(within(summary).getByText('Sin traspasos.')).toBeInTheDocument();
+    });
+
+    it('warns when part of the cost could not be estimated', async () => {
+      asManager();
+      server.use(
+        http.get(summaryUrl, () =>
+          HttpResponse.json({
+            success: true,
+            data: {
+              ...weeklySummaryFixture(),
+              unpricedModels: ['claude-unknown-9'],
+            },
+          })
+        )
+      );
+      render(<SettingsRoute />);
+
+      expect(
+        await screen.findByText(
+          /No incluye claude-unknown-9: no hay tarifa cargada para ese modelo\./
+        )
+      ).toBeInTheDocument();
+    });
+
+    it('shows the error when the summary cannot be loaded', async () => {
+      asManager();
+      server.use(
+        http.get(summaryUrl, () =>
+          HttpResponse.json(
+            { success: false, error: 'Algo falló.' },
+            { status: 500 }
+          )
+        )
+      );
+      render(<SettingsRoute />);
+
+      expect(
+        await screen.findByText(/No se pudo cargar el resumen/)
+      ).toBeInTheDocument();
+    });
   });
 });
