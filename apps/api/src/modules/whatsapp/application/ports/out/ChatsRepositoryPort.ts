@@ -35,6 +35,8 @@ export interface ChatsRepositoryPort {
   turnAssistantOn(conversationId: string, at: Date): Promise<boolean>;
   /** A message from the panel or the phone since the chat was (re)opened. */
   personRepliedSinceOpened(conversationId: string): Promise<boolean>;
+  /** A reply by the assistant that did not fail, since the chat was (re)opened. */
+  assistantRepliedSinceOpened(conversationId: string): Promise<boolean>;
   /** Marks the chat "Necesita asesor"; no-op if it already is. */
   requestHandoff(
     conversationId: string,

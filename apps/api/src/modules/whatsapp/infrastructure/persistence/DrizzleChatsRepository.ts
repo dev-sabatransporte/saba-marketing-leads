@@ -7,6 +7,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  ne,
   sql,
 } from 'drizzle-orm';
 import {
@@ -298,6 +299,26 @@ export class DrizzleChatsRepository implements ChatsRepositoryPort {
         and(
           eq(whatsappMessages.conversationId, conversationId),
           inArray(whatsappMessages.source, ['system', 'phone']),
+          gte(whatsappMessages.waTimestamp, whatsappConversations.openedAt)
+        )
+      )
+      .limit(1);
+    return reply !== undefined;
+  }
+
+  async assistantRepliedSinceOpened(conversationId: string): Promise<boolean> {
+    const [reply] = await this.db
+      .select({ id: whatsappMessages.id })
+      .from(whatsappMessages)
+      .innerJoin(
+        whatsappConversations,
+        eq(whatsappConversations.id, whatsappMessages.conversationId)
+      )
+      .where(
+        and(
+          eq(whatsappMessages.conversationId, conversationId),
+          eq(whatsappMessages.source, 'assistant'),
+          ne(whatsappMessages.status, 'failed'),
           gte(whatsappMessages.waTimestamp, whatsappConversations.openedAt)
         )
       )

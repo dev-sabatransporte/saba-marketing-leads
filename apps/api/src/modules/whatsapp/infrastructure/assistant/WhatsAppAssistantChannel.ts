@@ -35,6 +35,8 @@ export class WhatsAppAssistantChannel implements AssistantChannelPort {
       handoffRequestedAt: conversation.handoffRequestedAt,
       assigned: conversation.assignedTo !== null,
       personReplied: await this.chats.personRepliedSinceOpened(conversationId),
+      assistantRepliedSinceOpened:
+        await this.chats.assistantRepliedSinceOpened(conversationId),
       assistantPaused: conversation.assistantPausedAt !== null,
       messages: await this.chats.listMessages(conversationId, historyLimit),
     };

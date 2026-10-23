@@ -10,6 +10,8 @@ export interface AssistantChat {
   assigned: boolean;
   /** A person wrote from the panel or the phone since the chat was (re)opened. */
   personReplied: boolean;
+  /** The assistant answered since the chat was (re)opened, so it introduced itself already. */
+  assistantRepliedSinceOpened: boolean;
   /** A person paused the assistant in this chat. */
   assistantPaused: boolean;
   /** The most recent ones, in chronological order. */

@@ -11,6 +11,8 @@ export interface ChannelChat {
   assigned: boolean;
   /** A person wrote from the panel or the phone since the chat was (re)opened. */
   personReplied: boolean;
+  /** The assistant answered since the chat was (re)opened: it introduced itself already. */
+  assistantRepliedSinceOpened: boolean;
   /** A person paused the assistant in this chat until it is resolved. */
   assistantPaused: boolean;
   /** The most recent ones, in chronological order. */

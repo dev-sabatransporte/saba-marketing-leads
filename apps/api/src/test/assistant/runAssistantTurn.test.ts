@@ -62,6 +62,7 @@ const CHAT: ChannelChat = {
   handoffRequestedAt: null,
   assigned: false,
   personReplied: false,
+  assistantRepliedSinceOpened: true,
   assistantPaused: false,
   messages: [
     {

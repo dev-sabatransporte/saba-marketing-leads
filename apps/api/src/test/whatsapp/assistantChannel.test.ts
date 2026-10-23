@@ -203,6 +203,42 @@ describe('WhatsAppAssistantChannel (against Postgres)', () => {
     });
   });
 
+  it('tells whether the assistant already replied since the chat was (re)opened', async () => {
+    const conversationId = await createChat(TEN_MINUTES_AGO);
+    const assistantReply = (status: 'sent' | 'failed', waTimestamp: Date) =>
+      getTestDb().insert(whatsappMessages).values({
+        conversationId,
+        direction: 'outbound',
+        source: 'assistant',
+        type: 'text',
+        body: 'Catia queda en la Av. Sucre.',
+        status,
+        waTimestamp,
+      });
+    expect(await channel().read(conversationId, 20)).toMatchObject({
+      assistantRepliedSinceOpened: false,
+    });
+
+    // The customer never read a reply that failed.
+    await assistantReply('failed', NOW);
+    expect(await channel().read(conversationId, 20)).toMatchObject({
+      assistantRepliedSinceOpened: false,
+    });
+
+    await assistantReply('sent', NOW);
+    expect(await channel().read(conversationId, 20)).toMatchObject({
+      assistantRepliedSinceOpened: true,
+    });
+
+    await getTestDb()
+      .update(whatsappConversations)
+      .set({ openedAt: new Date(NOW.getTime() + 1000) })
+      .where(eq(whatsappConversations.id, conversationId));
+    expect(await channel().read(conversationId, 20)).toMatchObject({
+      assistantRepliedSinceOpened: false,
+    });
+  });
+
   it('does not send outside the 24 h window', async () => {
     const conversationId = await createChat(TWO_DAYS_AGO);
 
