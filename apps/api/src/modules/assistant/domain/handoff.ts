@@ -8,12 +8,14 @@ export function isHandoffReason(value: string | null): value is HandoffReason {
   return HANDOFF_REASONS.some((reason) => reason === value);
 }
 
-/** The ones the model may choose; the rest are decided by code. */
+/**
+ * The ones the model may choose; the rest are decided by code. `pricing` is
+ * no longer one: old rows keep it, but a price question gets a fixed text.
+ */
 export const MODEL_HANDOFF_REASONS = [
   'out_of_scope',
   'customer_requested',
   'data_not_found',
-  'pricing',
   'out_of_stock',
 ] as const satisfies readonly HandoffReason[];
 export type ModelHandoffReason = (typeof MODEL_HANDOFF_REASONS)[number];

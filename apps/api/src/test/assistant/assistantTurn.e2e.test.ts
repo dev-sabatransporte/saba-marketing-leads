@@ -25,6 +25,11 @@ import {
   ModelUnavailableError,
 } from '../../modules/assistant/domain/AssistantErrors';
 import {
+  CLOSING_REPLY,
+  GREETING_REPLY,
+  PRICING_REPLY,
+} from '../../modules/assistant/domain/fixedReplies';
+import {
   HANDOFF_NOTICE,
   type HandoffReason,
   handoffNotice,
@@ -420,7 +425,6 @@ describe('assistant turn (webhook → wait → model → WhatsApp)', () => {
     'out_of_scope',
     'customer_requested',
     'data_not_found',
-    'pricing',
     'out_of_stock',
   ] as const)('hands over when the model chooses %s', async (reason) => {
     await turnOn();
@@ -431,10 +435,39 @@ describe('assistant turn (webhook → wait → model → WhatsApp)', () => {
     await expectHandoff(reason);
   });
 
+  it.each([
+    ['greeting', '¡hola!', GREETING_REPLY],
+    ['closing', 'gracias', CLOSING_REPLY],
+  ] as const)(
+    'later in the chat, answers a batch that is only a %s with the fixed text',
+    async (fixed, body, text) => {
+      await turnOn();
+      await receive(textMessage('¿dónde queda Catia?', 'wamid.A'));
+      await waitForRun();
+      reply.mockResolvedValueOnce({ ...REPLY, kind: 'fixed', reply: fixed });
+
+      await receive(textMessage(body, 'wamid.B', 100));
+
+      await vi.waitFor(async () =>
+        expect(await getTestDb().select().from(assistantRuns)).toHaveLength(2)
+      );
+      expect(sendText).toHaveBeenLastCalledWith('584140000001', text);
+      const runs = await getTestDb().select().from(assistantRuns);
+      expect(runs).toContainEqual(
+        expect.objectContaining({ outcome: 'answered', reason: fixed })
+      );
+      expect((await conversation()).handoffRequestedAt).toBeNull();
+    }
+  );
+
   it('stays silent after handing over, even if the customer keeps writing', async () => {
     await turnOn();
-    reply.mockResolvedValue({ ...REPLY, kind: 'handoff', reason: 'pricing' });
-    await receive(textMessage('¿cuánto cuesta?', 'wamid.A'));
+    reply.mockResolvedValue({
+      ...REPLY,
+      kind: 'handoff',
+      reason: 'customer_requested',
+    });
+    await receive(textMessage('quiero hablar con alguien', 'wamid.A'));
     await waitForRun();
     reply.mockClear();
     sendText.mockClear();
@@ -611,9 +644,9 @@ describe('assistant turn (webhook → wait → model → WhatsApp)', () => {
     reply.mockResolvedValueOnce({
       ...REPLY,
       kind: 'handoff',
-      reason: 'pricing',
+      reason: 'customer_requested',
     });
-    await receive(textMessage('¿cuánto cuesta?', 'wamid.A'));
+    await receive(textMessage('quiero hablar con alguien', 'wamid.A'));
     await waitForRun();
 
     await app
@@ -703,7 +736,23 @@ describe('assistant turn (webhook → wait → model → WhatsApp)', () => {
       ]);
     });
 
-    it('hands a price question over and never sends an amount', async () => {
+    /** The prices text went out as an answer: no "Necesita asesor". */
+    async function expectPricesText() {
+      const run = await waitForRun();
+      expect(sendText).toHaveBeenCalledTimes(1);
+      expect(sendText).toHaveBeenCalledWith(
+        '584140000001',
+        expect.stringContaining(PRICING_REPLY)
+      );
+      expect(await conversation()).toMatchObject({
+        handoffRequestedAt: null,
+        handoffReason: null,
+      });
+      expect(run).toMatchObject({ outcome: 'answered', reason: 'pricing' });
+      return run;
+    }
+
+    it('answers a price question with the prices text and never sends an amount', async () => {
       await turnOn();
       searchThen('bera sbr', {
         ...REPLY,
@@ -711,26 +760,32 @@ describe('assistant turn (webhook → wait → model → WhatsApp)', () => {
       });
 
       await receive(textMessage('¿cuánto es la inicial de la bera sbr?'));
-      await expectHandoff('pricing');
+      const run = await expectPricesText();
 
-      expect(sendText).toHaveBeenCalledTimes(1);
       expect(sendText).not.toHaveBeenCalledWith(
         '584140000001',
         expect.stringContaining('300')
       );
+      expect(run.errorDetail).toContain('monto');
     });
 
-    it('hands over for pricing when the model chooses it after finding the product', async () => {
+    it('sends the prices text when the model picks pricing after finding the product, and keeps answering', async () => {
       await turnOn();
-      searchThen('bera sbr', { ...REPLY, kind: 'handoff', reason: 'pricing' });
+      // What the adapter returns for `transfer_to_human` with `pricing`.
+      searchThen('bera sbr', { ...REPLY, kind: 'fixed', reply: 'pricing' });
 
-      await receive(textMessage('¿en cuántas cuotas me dan la bera sbr?'));
-      const run = await expectHandoff('pricing');
-
-      expect(sendText).toHaveBeenCalledTimes(1);
+      await receive(
+        textMessage('¿en cuántas cuotas me dan la bera sbr?', 'wamid.A')
+      );
+      const run = await expectPricesText();
       expect(run.toolCalls).toEqual([
         { tool: 'search_products', query: 'bera sbr', resultCount: 1 },
       ]);
+
+      await receive(textMessage('¿y dónde queda Catia?', 'wamid.B', 100));
+
+      await vi.waitFor(() => expect(sendText).toHaveBeenCalledTimes(2));
+      expect(sendText).toHaveBeenLastCalledWith('584140000001', SENT_TEXT);
     });
 
     it('never sends an amount even without a currency sign', async () => {
@@ -741,12 +796,11 @@ describe('assistant turn (webhook → wait → model → WhatsApp)', () => {
       });
 
       await receive(textMessage('¿cuánto pago al mes por la bera sbr?'));
-      await expectHandoff('pricing');
+      await expectPricesText();
 
-      expect(sendText).toHaveBeenCalledTimes(1);
       expect(sendText).not.toHaveBeenCalledWith(
         '584140000001',
-        expect.stringContaining('cuotas')
+        expect.stringContaining('cuotas de 80')
       );
     });
 
@@ -843,6 +897,29 @@ describe('assistant turn (webhook → wait → model → WhatsApp)', () => {
       expect(sendText).not.toHaveBeenCalled();
       expect(reply).not.toHaveBeenCalled();
       expect(await runs()).toHaveLength(3);
+    });
+
+    it('counts the fixed greeting, closing and prices texts as replies', async () => {
+      await getTestDb()
+        .insert(assistantSettings)
+        .values({ enabled: true, perContactDailyLimit: 3 });
+
+      for (const [fixed, wamid, seconds] of [
+        ['greeting', 'wamid.A', 0],
+        ['pricing', 'wamid.B', 100],
+        ['closing', 'wamid.C', 200],
+      ] as const) {
+        reply.mockResolvedValueOnce({ ...REPLY, kind: 'fixed', reply: fixed });
+        await receiveAndWait(writesAt('hola', wamid, seconds));
+      }
+      reply.mockClear();
+
+      await receiveAndWait(writesAt('¿y Catia?', 'wamid.D', 300));
+      expect(reply).not.toHaveBeenCalled();
+      expect((await runs()).at(-1)).toMatchObject({
+        outcome: 'handoff',
+        reason: 'limit_reached',
+      });
     });
 
     it('answers the contact again once its replies are older than 24 h', async () => {

@@ -54,7 +54,6 @@ describe('buildInstructions', () => {
       PLAIN
     );
 
-    expect(text).toContain('asistente virtual de Saba');
     expect(text).toContain('Catia');
     expect(text).toContain('Av. Sucre');
     expect(text).toContain('Lunes a viernes 8:00 a. m. a 5:00 p. m.');
@@ -127,11 +126,23 @@ describe('buildInstructions', () => {
     }
   });
 
-  it('tells the model to decide by the latest message and to answer greetings', () => {
+  it('tells the model to decide by the latest message, with tools for greetings and closings', () => {
     const text = buildInstructions(null, PLAIN);
     expect(text).toContain('último mensaje del cliente');
-    expect(text).toMatch(/saludo/i);
+    expect(text).toContain('greeting_only');
+    expect(text).toContain('closing');
   });
+
+  it.each([PLAIN, SIMPLE])(
+    'forbids greeting, introducing itself and small talk, and never asks it to introduce itself (%o)',
+    (setting) => {
+      const text = buildInstructions(null, setting);
+      expect(text).toMatch(/no saludes, no te presentes/i);
+      expect(text).toMatch(/charla/);
+      expect(text).not.toMatch(/presént/i);
+      expect(text).not.toMatch(/con amabilidad/i);
+    }
+  );
 
   it('adds the brevity rules only with simple replies on', () => {
     const simple = buildInstructions(null, SIMPLE);
@@ -139,7 +150,6 @@ describe('buildInstructions', () => {
 
     for (const rule of [
       'Responde solo lo que te preguntaron, en 1 o 2 frases',
-      'Preséntate solo en tu primer mensaje',
       'Sin listas largas: si preguntan por las sedes en general, nómbralas y pregunta cuál le interesa',
       'No repitas datos que ya diste',
     ]) {

@@ -12,6 +12,7 @@ import {
   toModelTurns,
   withinReplyWindow,
 } from '../../domain/conversation';
+import { fixedReplyText, PRICING_REPLY } from '../../domain/fixedReplies';
 import {
   type HandoffReason,
   handoffNotice,
@@ -204,36 +205,53 @@ export class RunAssistantTurnUseCase implements RunAssistantTurnPort {
     if (reply.kind === 'handoff') {
       return handOver(reply.reason, { errorDetail: null, ...billed });
     }
+    if (reply.kind === 'fixed') {
+      return this.answer(conversationId, fixedReplyText(reply.reply), run, {
+        reason: reply.reply,
+        errorDetail: null,
+        ...billed,
+      });
+    }
     if (mentionsAnAmount(reply.text)) {
-      return handOver('pricing', {
+      return this.answer(conversationId, PRICING_REPLY, run, {
+        reason: 'pricing',
         errorDetail: 'la respuesta mencionaba un monto; no se envió',
         ...billed,
       });
     }
-
-    let sentMessageId: string;
-    try {
-      sentMessageId = (
-        await this.channel.sendAsAssistant(
-          conversationId,
-          withMapLinks(reply.text, stores)
-        )
-      ).id;
-    } catch (error: unknown) {
-      return handOver('error', {
-        errorDetail: `send_failed: ${describe(error)}`,
-        ...billed,
-      });
-    }
-
-    // Outside the try: a failure here must not log a reply that did go out as failed.
-    await run({
-      sentMessageId,
-      outcome: 'answered',
+    return this.answer(conversationId, withMapLinks(reply.text, stores), run, {
       reason: null,
       errorDetail: null,
       ...billed,
     });
+  }
+
+  /** Sends the reply; if WhatsApp rejects it, someone has to pick the chat up. */
+  private async answer(
+    conversationId: string,
+    text: string,
+    run: (fields: RunFields) => Promise<void>,
+    details: Pick<RunFields, 'reason' | 'errorDetail' | 'model' | 'usage'>
+  ): Promise<TurnResult> {
+    let sentMessageId: string;
+    try {
+      sentMessageId = (await this.channel.sendAsAssistant(conversationId, text))
+        .id;
+    } catch (error: unknown) {
+      return this.handOver(
+        conversationId,
+        'error',
+        {
+          errorDetail: `send_failed: ${describe(error)}`,
+          model: details.model,
+          usage: details.usage,
+        },
+        run
+      );
+    }
+
+    // Outside the try: a failure here must not log a reply that did go out as failed.
+    await run({ ...details, sentMessageId, outcome: 'answered' });
     return 'answered';
   }
 

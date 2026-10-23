@@ -1,14 +1,17 @@
 import type { TokenUsage } from '../../../domain/AssistantRun';
 import type { ModelTurn } from '../../../domain/conversation';
+import type { FixedReply } from '../../../domain/fixedReplies';
 import type { ModelHandoffReason } from '../../../domain/handoff';
 import type { Product } from '../../../domain/product';
 
 /**
- * The model answers the customer, hands the chat to a person, or asks for a
- * product search and waits for its result before deciding.
+ * The model answers the customer, picks one of the fixed texts (so it writes
+ * no output for a greeting, a thank-you or a price question), hands the chat
+ * to a person, or asks for a product search and waits for its result.
  */
 export type ModelDecision =
   | { kind: 'answer'; text: string }
+  | { kind: 'fixed'; reply: FixedReply }
   | { kind: 'handoff'; reason: ModelHandoffReason }
   | { kind: 'search_products'; callId: string; query: string };
 

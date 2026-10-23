@@ -16,6 +16,11 @@ import {
   DEFAULT_ASSISTANT_SETTINGS,
 } from '../../modules/assistant/domain/AssistantSettings';
 import {
+  CLOSING_REPLY,
+  GREETING_REPLY,
+  PRICING_REPLY,
+} from '../../modules/assistant/domain/fixedReplies';
+import {
   HANDOFF_NOTICE,
   handoffNotice,
 } from '../../modules/assistant/domain/handoff';
@@ -344,7 +349,7 @@ describe('RunAssistantTurnUseCase', () => {
       reply: vi.fn(
         async (): Promise<ModelReply> => ({
           kind: 'handoff',
-          reason: 'pricing',
+          reason: 'customer_requested',
           model: 'claude-sonnet-5-5',
           usage: USAGE,
         })
@@ -353,11 +358,11 @@ describe('RunAssistantTurnUseCase', () => {
 
     expect(await turn()).toBe('handoff');
     expect(send).toHaveBeenCalledWith('c-1', HANDOFF_NOTICE);
-    expect(requestHandoff).toHaveBeenCalledWith('c-1', 'pricing');
+    expect(requestHandoff).toHaveBeenCalledWith('c-1', 'customer_requested');
     expect(record).toHaveBeenCalledWith(
       expect.objectContaining({
         outcome: 'handoff',
-        reason: 'pricing',
+        reason: 'customer_requested',
         sentMessageId: 'out-1',
         usage: USAGE,
       })
@@ -381,7 +386,41 @@ describe('RunAssistantTurnUseCase', () => {
     expect(send).toHaveBeenCalledWith('c-1', handoffNotice('out_of_stock'));
   });
 
-  it('never sends an answer with an amount: it hands over for pricing', async () => {
+  it.each([
+    ['greeting', GREETING_REPLY],
+    ['closing', CLOSING_REPLY],
+    ['pricing', PRICING_REPLY],
+  ] as const)(
+    'sends the fixed %s text the model picked, as an answer that counts',
+    async (fixed, text) => {
+      const { turn, send, requestHandoff, record } = setup({
+        reply: vi.fn(
+          async (): Promise<ModelReply> => ({
+            kind: 'fixed',
+            reply: fixed,
+            model: 'claude-sonnet-5-5',
+            usage: USAGE,
+          })
+        ),
+      });
+
+      expect(await turn()).toBe('answered');
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledWith('c-1', text);
+      expect(requestHandoff).not.toHaveBeenCalled();
+      expect(record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          outcome: 'answered',
+          reason: fixed,
+          sentMessageId: 'out-1',
+          errorDetail: null,
+          usage: USAGE,
+        })
+      );
+    }
+  );
+
+  it('never sends an answer with an amount: it sends the prices text, without a handoff', async () => {
     const { turn, send, requestHandoff, record } = setup({
       reply: vi.fn(
         async (): Promise<ModelReply> => ({
@@ -391,16 +430,43 @@ describe('RunAssistantTurnUseCase', () => {
       ),
     });
 
-    expect(await turn()).toBe('handoff');
-    expect(requestHandoff).toHaveBeenCalledWith('c-1', 'pricing');
+    expect(await turn()).toBe('answered');
+    expect(requestHandoff).not.toHaveBeenCalled();
     expect(send).toHaveBeenCalledTimes(1);
-    expect(send).toHaveBeenCalledWith('c-1', HANDOFF_NOTICE);
+    expect(send).toHaveBeenCalledWith('c-1', PRICING_REPLY);
     expect(record).toHaveBeenCalledWith(
       expect.objectContaining({
-        outcome: 'handoff',
+        outcome: 'answered',
         reason: 'pricing',
         errorDetail: expect.stringContaining('monto'),
         usage: USAGE,
+      })
+    );
+  });
+
+  it('hands over with error when the fixed text cannot be sent', async () => {
+    const send = vi
+      .fn(async (_id: string, _body: string) => ({ id: 'out-2' }))
+      .mockRejectedValueOnce(new Error('Meta 500'));
+    const { turn, requestHandoff, record } = setup({
+      send,
+      reply: vi.fn(
+        async (): Promise<ModelReply> => ({
+          kind: 'fixed',
+          reply: 'closing',
+          model: 'claude-sonnet-5-5',
+          usage: USAGE,
+        })
+      ),
+    });
+
+    expect(await turn()).toBe('handoff');
+    expect(requestHandoff).toHaveBeenCalledWith('c-1', 'error');
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outcome: 'handoff',
+        reason: 'error',
+        errorDetail: expect.stringContaining('Meta 500'),
       })
     );
   });

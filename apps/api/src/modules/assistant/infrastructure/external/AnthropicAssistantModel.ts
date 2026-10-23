@@ -8,6 +8,7 @@ import type {
 } from '../../application/ports/out/AssistantModelPort';
 import { ModelUnavailableError } from '../../domain/AssistantErrors';
 import type { ModelTurn } from '../../domain/conversation';
+import type { FixedReply } from '../../domain/fixedReplies';
 import { MODEL_HANDOFF_REASONS } from '../../domain/handoff';
 import { ASSISTANT_TOKENS } from '../../tokens';
 import type { AssistantConfig } from '../assistantConfig';
@@ -37,6 +38,9 @@ const SEARCH_PRODUCTS = {
   strict: true,
 };
 
+// `pricing` stays a transfer reason for the model, but code answers it.
+const TRANSFER_REASONS = [...MODEL_HANDOFF_REASONS, 'pricing'] as const;
+
 const TRANSFER_TO_HUMAN = {
   name: 'transfer_to_human',
   description:
@@ -44,7 +48,7 @@ const TRANSFER_TO_HUMAN = {
   input_schema: {
     type: 'object' as const,
     properties: {
-      reason: { type: 'string', enum: [...MODEL_HANDOFF_REASONS] },
+      reason: { type: 'string', enum: [...TRANSFER_REASONS] },
     },
     required: ['reason'],
     additionalProperties: false,
@@ -52,7 +56,34 @@ const TRANSFER_TO_HUMAN = {
   strict: true,
 };
 
-const transferInputSchema = z.object({ reason: z.enum(MODEL_HANDOFF_REASONS) });
+const NO_INPUT = {
+  type: 'object' as const,
+  properties: {},
+  additionalProperties: false,
+};
+
+const GREETING_ONLY = {
+  name: 'greeting_only',
+  description:
+    'Los mensajes del cliente son solo un saludo o una presentación, sin ninguna pregunta. El sistema le responde con un texto fijo: no escribas nada.',
+  input_schema: NO_INPUT,
+  strict: true,
+};
+
+const CLOSING = {
+  name: 'closing',
+  description:
+    'Los mensajes del cliente son solo un agradecimiento o una despedida ("gracias", "ok", "listo"), sin ninguna pregunta. El sistema le responde con un texto fijo: no escribas nada.',
+  input_schema: NO_INPUT,
+  strict: true,
+};
+
+const FIXED_REPLY_TOOLS = new Map<string, FixedReply>([
+  [GREETING_ONLY.name, 'greeting'],
+  [CLOSING.name, 'closing'],
+]);
+
+const transferInputSchema = z.object({ reason: z.enum(TRANSFER_REASONS) });
 const searchInputSchema = z.object({ query: z.string().trim().min(1) });
 
 /** Each search goes back as the model's call followed by Saba's result. */
@@ -145,7 +176,7 @@ export class AnthropicAssistantModel implements AssistantModelPort {
             cache_control: { type: 'ephemeral' },
           },
         ],
-        tools: [SEARCH_PRODUCTS, TRANSFER_TO_HUMAN],
+        tools: [SEARCH_PRODUCTS, TRANSFER_TO_HUMAN, GREETING_ONLY, CLOSING],
         // Forcing a tool is a 400 on this model family: the model decides.
         // One call at a time keeps each search paired with its result.
         tool_choice: { type: 'auto', disable_parallel_tool_use: true },
@@ -203,8 +234,18 @@ export class AnthropicAssistantModel implements AssistantModelPort {
           billed
         );
       }
-      return { kind: 'handoff', reason: input.data.reason, ...billed };
+      const { reason } = input.data;
+      return reason === 'pricing'
+        ? { kind: 'fixed', reply: 'pricing', ...billed }
+        : { kind: 'handoff', reason, ...billed };
     }
+
+    const fixed = response.content.flatMap((block) => {
+      const reply =
+        block.type === 'tool_use' ? FIXED_REPLY_TOOLS.get(block.name) : null;
+      return reply ? [reply] : [];
+    })[0];
+    if (fixed) return { kind: 'fixed', reply: fixed, ...billed };
 
     const search = response.content.find(
       (block) =>

@@ -94,6 +94,16 @@ describe('AnthropicAssistantModel', () => {
             required: ['reason'],
           }),
         }),
+        expect.objectContaining({
+          name: 'greeting_only',
+          strict: true,
+          input_schema: expect.objectContaining({ properties: {} }),
+        }),
+        expect.objectContaining({
+          name: 'closing',
+          strict: true,
+          input_schema: expect.objectContaining({ properties: {} }),
+        }),
       ],
     });
   });
@@ -248,7 +258,7 @@ describe('AnthropicAssistantModel', () => {
             type: 'tool_use',
             id: 'toolu_1',
             name: 'transfer_to_human',
-            input: { reason: 'pricing' },
+            input: { reason: 'customer_requested' },
           },
         ],
       })
@@ -258,10 +268,52 @@ describe('AnthropicAssistantModel', () => {
       await new AnthropicAssistantModel(CONFIG).reply(INPUT)
     ).toMatchObject({
       kind: 'handoff',
-      reason: 'pricing',
+      reason: 'customer_requested',
       model: 'claude-sonnet-5-5',
     });
   });
+
+  it('a transfer for pricing is the fixed prices text, not a handoff', async () => {
+    stubFetch(
+      message({
+        stop_reason: 'tool_use',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu_1',
+            name: 'transfer_to_human',
+            input: { reason: 'pricing' },
+          },
+        ],
+      })
+    );
+
+    expect(
+      await new AnthropicAssistantModel(CONFIG).reply(INPUT)
+    ).toMatchObject({ kind: 'fixed', reply: 'pricing' });
+  });
+
+  it.each([
+    ['greeting_only', 'greeting'],
+    ['closing', 'closing'],
+  ] as const)(
+    '%s asks for the fixed %s text, ignoring any text the model wrote',
+    async (tool, fixed) => {
+      stubFetch(
+        message({
+          stop_reason: 'tool_use',
+          content: [
+            { type: 'text', text: '¡Hola! ¿Cómo estás?' },
+            { type: 'tool_use', id: 'toolu_1', name: tool, input: {} },
+          ],
+        })
+      );
+
+      expect(
+        await new AnthropicAssistantModel(CONFIG).reply(INPUT)
+      ).toMatchObject({ kind: 'fixed', reply: fixed });
+    }
+  );
 
   it('treats an unknown handoff reason as an unusable reply', async () => {
     stubFetch(
