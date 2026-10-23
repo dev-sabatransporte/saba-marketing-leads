@@ -132,7 +132,12 @@ function setup({
     { current: async () => stores },
     { search },
     { reply },
-    { record, countReplies, explainSentMessage: async () => null },
+    {
+      record,
+      countReplies,
+      explainSentMessage: async () => null,
+      deleteCreatedBefore: async () => 0,
+    },
     { now: () => NOW }
   );
   const turn = (messageIds = ['in-1', 'in-2']) =>

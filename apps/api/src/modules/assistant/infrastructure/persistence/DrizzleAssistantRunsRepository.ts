@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, count, desc, eq, gte } from 'drizzle-orm';
+import { and, count, desc, eq, gte, lt } from 'drizzle-orm';
 import {
   type ApiDb,
   DRIZZLE_CLIENT,
@@ -82,5 +82,13 @@ export class DrizzleAssistantRunsRepository
       reason: isHandoffReason(row.reason) ? row.reason : 'error',
       toolCalls,
     };
+  }
+
+  async deleteCreatedBefore(cutoff: Date): Promise<number> {
+    const deleted = await this.db
+      .delete(assistantRuns)
+      .where(lt(assistantRuns.createdAt, cutoff))
+      .returning({ id: assistantRuns.id });
+    return deleted.length;
   }
 }

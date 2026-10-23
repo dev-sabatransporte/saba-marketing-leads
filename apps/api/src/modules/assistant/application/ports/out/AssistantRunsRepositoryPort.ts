@@ -12,4 +12,6 @@ export interface AssistantRunsRepositoryPort {
   }): Promise<number>;
   /** From the run that sent this message; `null` if no run did. */
   explainSentMessage(messageId: string): Promise<MessageExplanation | null>;
+  /** Returns how many were deleted. */
+  deleteCreatedBefore(cutoff: Date): Promise<number>;
 }

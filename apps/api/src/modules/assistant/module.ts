@@ -5,6 +5,7 @@ import { WHATSAPP_TOKENS } from '../whatsapp/tokens';
 import { GetAssistantSettingsUseCase } from './application/use-cases/GetAssistantSettingsUseCase';
 import { GetDailyLimitStatusUseCase } from './application/use-cases/GetDailyLimitStatusUseCase';
 import { GetMessageExplanationUseCase } from './application/use-cases/GetMessageExplanationUseCase';
+import { PurgeOldRunsUseCase } from './application/use-cases/PurgeOldRunsUseCase';
 import { ReplyToDueChatsUseCase } from './application/use-cases/ReplyToDueChatsUseCase';
 import { RunAssistantTurnUseCase } from './application/use-cases/RunAssistantTurnUseCase';
 import { ScheduleReplyUseCase } from './application/use-cases/ScheduleReplyUseCase';
@@ -12,6 +13,7 @@ import { UpdateAssistantSettingsUseCase } from './application/use-cases/UpdateAs
 import { loadAssistantConfig } from './infrastructure/assistantConfig';
 import { AssistantInboundHandler } from './infrastructure/bus/AssistantInboundHandler';
 import { AssistantReplySweeper } from './infrastructure/bus/AssistantReplySweeper';
+import { AssistantRunsPurger } from './infrastructure/bus/AssistantRunsPurger';
 import { AnthropicAssistantModel } from './infrastructure/external/AnthropicAssistantModel';
 import { HttpSabaAssistantProducts } from './infrastructure/external/HttpSabaAssistantProducts';
 import { HttpSabaAssistantStores } from './infrastructure/external/HttpSabaAssistantStores';
@@ -94,6 +96,12 @@ import { ASSISTANT_TOKENS } from './tokens';
       provide: ASSISTANT_TOKENS.GetMessageExplanation,
       useExisting: GetMessageExplanationUseCase,
     },
+    PurgeOldRunsUseCase,
+    {
+      provide: ASSISTANT_TOKENS.PurgeOldRuns,
+      useExisting: PurgeOldRunsUseCase,
+    },
+    AssistantRunsPurger,
   ],
 })
 export class AssistantModule {}

@@ -53,3 +53,12 @@ export interface NewAssistantRun {
 export type MessageExplanation =
   | { outcome: 'answered'; toolCalls: ToolCall[] }
   | { outcome: 'handoff'; reason: HandoffReason; toolCalls: ToolCall[] };
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** Long enough to review a quarter; past it, the runs only take up space. */
+export const RUN_RETENTION_DAYS = 90;
+
+/** Runs created before this moment are purged. */
+export function runRetentionCutoff(now: Date): Date {
+  return new Date(now.getTime() - RUN_RETENTION_DAYS * DAY_MS);
+}
