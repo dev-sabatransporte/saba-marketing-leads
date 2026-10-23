@@ -383,12 +383,12 @@ describe('ChatsPage', () => {
 
       expect(
         await within(thread).findByText(
-          'No buscó productos: respondió solo con las sedes y horarios que tiene cargados.'
+          'Usó la información de sedes y horarios que tiene cargada.'
         )
       ).toBeInTheDocument();
     });
 
-    it('says a handoff without searches searched nothing', async () => {
+    it('shows only the reason for a handoff without searches', async () => {
       assistantMessages();
       server.use(
         http.get(`${BACKEND_URL}/v1/assistant/messages/:id/explanation`, () =>
@@ -408,8 +408,12 @@ describe('ChatsPage', () => {
       );
 
       expect(
-        await within(thread).findByText('No buscó productos.')
+        await within(thread).findByText(
+          /Traspasó a un asesor: preguntó por precio/
+        )
       ).toBeInTheDocument();
+      expect(within(thread).queryByText(/Usó la información/)).toBeNull();
+      expect(within(thread).queryByText(/Buscó/)).toBeNull();
     });
 
     it('shows the API error when there is no detail', async () => {

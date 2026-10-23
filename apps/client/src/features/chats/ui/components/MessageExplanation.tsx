@@ -4,7 +4,6 @@ import { Skeleton } from '@repo/ui/components/skeleton';
 import React from 'react';
 import { useMessageExplanation } from '../../application/queries/useMessageExplanation.query';
 import {
-  noSearchesLabel,
   outcomeLabel,
   resultsLabel,
 } from '../../domain/messageExplanation.model';
@@ -36,7 +35,11 @@ export function MessageExplanation({
               ))}
             </ul>
           ) : (
-            <p>{noSearchesLabel(data)}</p>
+            // Stores and hours travel in its instructions, not as a search:
+            // an answer without searches could only use them.
+            !data.handoffReason && (
+              <p>Usó la información de sedes y horarios que tiene cargada.</p>
+            )
           )}
           <p className="font-medium">{outcomeLabel(data)}</p>
         </div>
