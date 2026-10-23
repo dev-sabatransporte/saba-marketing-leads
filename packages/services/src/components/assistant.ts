@@ -1,14 +1,16 @@
 import {
   assistantDailyLimitResponseSchema,
+  assistantMessageExplanationResponseSchema,
   assistantSettingsResponseSchema,
   type TAssistantDailyLimit,
+  type TAssistantMessageExplanation,
   type TAssistantSettings,
   type TUpdateAssistantSettings,
 } from '@repo/schemas';
 import type { Safe } from '@repo/utils';
 import type { HttpClient, HttpRequestOptions } from '../http';
 
-/** AssistantService — the WhatsApp assistant's switch and limits. */
+/** AssistantService — the WhatsApp assistant's switch, limits and the "¿por qué?" of its messages. */
 export class AssistantService {
   private readonly basePath = '/v1/assistant';
 
@@ -46,6 +48,18 @@ export class AssistantService {
       undefined,
       options,
       assistantDailyLimitResponseSchema
+    );
+  }
+
+  async getMessageExplanation(
+    messageId: string,
+    options?: HttpRequestOptions
+  ): Promise<Safe<TAssistantMessageExplanation>> {
+    return await this.httpClient.get(
+      `${this.basePath}/messages/${encodeURIComponent(messageId)}/explanation`,
+      undefined,
+      options,
+      assistantMessageExplanationResponseSchema
     );
   }
 }
