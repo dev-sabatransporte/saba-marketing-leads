@@ -97,6 +97,12 @@ describe('buildInstructions', () => {
     expect(text).toMatch(/nunca[^\n]*de memoria/i);
   });
 
+  it('tells the model it can search by category and that 10 results are never the whole catalog', () => {
+    const text = buildInstructions(null, PLAIN);
+    expect(text).toMatch(/categoría, como "motos"/);
+    expect(text).toMatch(/como ejemplos y nunca digas que es la lista completa/);
+  });
+
   it('hands over every question about price, down payment, instalments or credit', () => {
     const text = buildInstructions(null, PLAIN);
     for (const word of [

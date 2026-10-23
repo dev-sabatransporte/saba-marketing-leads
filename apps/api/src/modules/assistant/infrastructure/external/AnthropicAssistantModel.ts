@@ -21,13 +21,14 @@ const TIMEOUT_MS = 30_000;
 const SEARCH_PRODUCTS = {
   name: 'search_products',
   description:
-    'Busca productos activos de Saba por nombre, modelo o marca (sin importar tildes). Devuelve hasta 10, cada uno con name, model, brand, categories e in_stock. Nunca devuelve precios.',
+    'Busca productos activos de Saba por nombre, modelo, marca o categoría (sin importar tildes ni plurales). Devuelve hasta 10, cada uno con name, model, brand, categories e in_stock. Nunca devuelve precios.',
   input_schema: {
     type: 'object' as const,
     properties: {
       query: {
         type: 'string',
-        description: 'Nombre, modelo o marca, p. ej. "bera sbr 150".',
+        description:
+          'Nombre, modelo, marca o categoría, p. ej. "bera sbr 150" o "motos".',
       },
     },
     required: ['query'],
