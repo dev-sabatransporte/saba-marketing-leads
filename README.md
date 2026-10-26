@@ -123,6 +123,12 @@ Con `npm run dev` corriendo, configura el webhook en Meta:
   `docs/api_modules.md`.
 - **Imágenes de producción en local:** `docker compose --profile full up --build`.
 
+## Asistente de WhatsApp
+
+Qué responde, cuándo le pasa el chat a un asesor y qué se controla desde
+"Ajustes": `docs/whatsapp_assistant.md`. La configuración del lado de Meta, en
+`docs/whatsapp_meta_setup.md`.
+
 ## Módulo de referencia: `leads`
 
 Recorre el camino completo: `packages/schemas/src/lead` (contrato Zod) →
